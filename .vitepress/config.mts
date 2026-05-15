@@ -11,8 +11,10 @@ const guideSidebar = [
     items: [
       { text: "Overview", link: "/guide/" },
       { text: "Getting Started", link: "/guide/getting-started" },
+      { text: "Invitation System & Networking", link: "/guide/invitation-system" },
       { text: "Models", link: "/guide/models" },
       { text: "MCP Tools", link: "/guide/mcp" },
+      { text: "Phone & SMS MCP", link: "/guide/phone-mcp" },
       { text: "Gateway", link: "/guide/gateway" },
       { text: "Channels", link: "/guide/channels" },
       { text: "Memory & Vault", link: "/guide/memory" },
