@@ -2,9 +2,9 @@
   "name": "openagent-site",
   "private": true,
   "scripts": {
-    "docs:dev": "vitepress dev docs --host 0.0.0.0",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs --host 0.0.0.0"
+    "docs:dev": "vitepress dev . --host 0.0.0.0",
+    "docs:build": "vitepress build .",
+    "docs:preview": "vitepress preview . --host 0.0.0.0"
   },
   "devDependencies": {
     "mermaid": "^11.14.0",
