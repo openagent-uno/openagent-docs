@@ -1,81 +1,105 @@
 # Gateway
 
-The Gateway is OpenAgent's single public interface — a WebSocket + REST
-server on one port (default 8765). Every client — desktop app, CLI,
-Telegram/Discord/WhatsApp bridges, custom scripts — talks to the agent
-through it. Internally it is an aiohttp application that hosts both the
-WebSocket endpoint (`/ws`) and the full REST surface (`/api/*`) on the
-same port.
+The Gateway is OpenAgent's public interface — a WebSocket + REST server that lives **inside the AgentServer process**. Every client (desktop app, CLI, Telegram/Discord/WhatsApp bridges) talks to the agent through it.
+
+Unlike a traditional HTTP server listening on a TCP port, the Gateway is served over **Iroh QUIC** (a P2P transport). Clients don't connect to `localhost:8765` — they connect to the agent's Iroh NodeId, authenticated by a coordinator-signed device certificate.
 
 ```
  ┌────────────────────────────────────────────────────────┐
  │  Agent Directory (./my-agent)                          │
  │  ┌─────────────────────────┐                           │
- │  │   OpenAgent Core        │  openagent.yaml           │
+ │  │   Agent Core            │  openagent.yaml           │
  │  │   Agent + MCPs          │  openagent.db             │
  │  └──────────┬──────────────┘  memories/                │
  │             │                  logs/                   │
- │  ┌──────────▼──────────────┐  .port                    │
- │  │      Gateway            │                           │
- │  │   WS + REST (aiohttp)   │                           │
- │  │   Port auto-allocated   │                           │
+ │  ┌──────────▼──────────────┐                           │
+ │  │      Gateway             │                          │
+ │  │  WS + REST (aiohttp)    │                           │
+ │  │  over Iroh QUIC          │                           │
+ │  │  Device cert auth        │                           │
  │  └──────────┬──────────────┘                           │
  └─────────────┼──────────────────────────────────────────┘
-               │
+               │ Iroh QUIC (P2P)
   ┌────────────┼────────────────┐
   │            │                 │
 ┌─▼──────┐ ┌──▼─────────┐ ┌────▼───┐
 │Bridges │ │ Desktop App│ │  CLI   │
 │TG/DC/WA│ │ (Electron) │ │(term.) │
+│(certs) │ │ (certs)    │ │(certs) │
 └────────┘ └────────────┘ └────────┘
 ```
 
-## Port allocation
+## Authentication
 
-When running multiple agents, each gets its own Gateway on a separate
-port. If the preferred port is busy, the next available port is
-auto-allocated (scans +1 through +99). The actual port is written to
-`<agent_dir>/.port` so clients and tooling can discover it without
-guessing.
+The Gateway uses **device certificate authentication**, not bearer tokens or shared secrets. Every inbound connection carries a coordinator-signed certificate that binds a user handle to a device public key.
+
+The `NetworkAuthState` middleware runs on every request:
+1. Extract the cert wire bytes from the Iroh stream
+2. Verify the Ed25519 signature against the pinned coordinator public key
+3. Check the cert hasn't expired (30-day TTL)
+4. Check the cert is for this network (`network_id` match)
+5. Check the device hasn't been revoked (`network_devices.status = 'active'`)
+6. Annotate the request with `device_cert`, `client_id`, and `user_handle`
+
+Failed auth returns `401 unauthorized`. Unlike the legacy shared-token model, each device has its own credential — revoking one device doesn't affect others for the same user.
+
+See [Invitation System & Networking](./invitation-system.md) for the full cert lifecycle and coordinator architecture.
 
 ## WebSocket protocol
 
-All traffic on `/ws` is JSON. See `openagent/gateway/protocol.py` for the
-canonical message-type constants.
+All traffic on `/ws` is JSON. The protocol uses typed messages for both directions.
 
-**Client → Server**
+### Client → Server
 
-| Type      | Payload                                                  | Purpose                          |
-|-----------|----------------------------------------------------------|----------------------------------|
-| `auth`    | `{token, client_id}`                                     | Handshake; must be first message |
-| `message` | `{text, session_id, attachments?}`                       | Send a user turn to the agent    |
-| `command` | `{name: stop\|clear\|new\|reset\|…, session_id}`         | Slash-command equivalents        |
-| `ping`    | `{}`                                                     | Keep-alive                       |
+| Type | Payload | Purpose |
+|---|---|---|
+| `auth` | `{token, client_id}` | Handshake (legacy: now cert-based, but still present for bridges) |
+| `session_open` | `{session_id}` | Open or resume a conversation session |
+| `text_final` | `{text, session_id, attachments?}` | Send a user turn to the agent |
+| `audio_chunk_in` | `{session_id, data: base64, seq, is_end}` | Voice mode audio input |
+| `attachment` | `{session_id, path, filename, type}` | Attach a file to the current turn |
+| `interrupt` | `{session_id}` | Interrupt the current agent run |
+| `command` | `{name: stop\|clear\|new\|reset\|…, session_id}` | Slash-command equivalents |
+| `ping` | `{}` | Keep-alive |
 
-**Server → Client**
+### Server → Client
 
-| Type             | Payload                                                         | Purpose                                   |
-|------------------|-----------------------------------------------------------------|-------------------------------------------|
-| `auth_ok`        | `{agent_name, version}`                                         | Handshake accepted                        |
-| `queued`         | `{position}`                                                    | Message accepted, waiting in FIFO queue   |
-| `status`         | `{text, session_id}`                                            | Live progress (tool use, thinking, …)     |
-| `response`       | `{text, session_id, model, attachments}`                        | Final agent reply for a turn              |
-| `error`          | `{text}`                                                        | Recoverable error                         |
-| `command_result` | `{text}`                                                        | Response to a slash command               |
-| `pong`           | `{}`                                                            | Keep-alive ack                            |
+| Type | Payload | Purpose |
+|---|---|---|
+| `auth_ok` | `{agent_name, version}` | Handshake accepted |
+| `auth_error` | `{reason}` | Handshake rejected |
+| `delta` | `{text, session_id}` | Streaming token during generation |
+| `status` | `{text, session_id}` | Live progress (tool use, thinking, …) |
+| `response` | `{text, session_id, model, attachments}` | Final agent reply for a turn |
+| `turn_complete` | `{session_id, usage}` | Turn finished, includes cost/token info |
+| `queued` | `{position}` | Message accepted, waiting in FIFO queue |
+| `pong` | `{}` | Keep-alive ack |
+| `audio_start` / `audio_chunk` / `audio_end` | `{session_id, …}` | TTS audio streaming |
+| `resource_event` | `{resource, action, id}` | Broadcast on MCP/vault/task/config mutations |
+| `system_snapshot` | `{cpu_percent, ram_percent, disk_percent}` | System health broadcast |
+| `error` | `{text}` | Recoverable error |
+| `command_result` | `{text}` | Response to a slash command |
 
-Attachments use markers in reply text (`[IMAGE:/path]`, `[FILE:/path]`,
-`[VOICE:/path]`, `[VIDEO:/path]`) which the gateway strips and moves into
-the structured `attachments` array — see [Channels → Media Support](./channels.md#media-support).
+### Attachments
+
+Attachments use markers in reply text (`[IMAGE:/path]`, `[FILE:/path]`, `[VOICE:/path]`, `[VIDEO:/path]`) which the gateway strips and moves into the structured `attachments` array with `{type, path, filename}` entries.
+
+## Session management
+
+The Gateway owns a `SessionManager` that enforces **one active run per client** (`client_id` = device pubkey hex) with a FIFO queue. Messages arriving while a turn is in flight get an immediate `queued` acknowledgement with position, then stream `status` events until `response` arrives. An `interrupt` command cancels the active run.
+
+Sessions are isolated — each `session_id` maps to its own conversation history. Bridges use platform-specific session IDs (e.g. `tg:155490357` for Telegram), while the desktop app and CLI use arbitrary strings. Session bindings (which model served this session) persist in SQLite across restarts.
 
 ## REST API
+
+All endpoints live under `/api/` on the same aiohttp application. Every request is authenticated via device cert middleware (except `/api/health` which may bypass for liveness checks).
 
 ```
 # Health + identity
 GET    /api/health                → agent status
 GET    /api/agent-info            → agent name, dir, port, version
 
-# Config
+# Config (hot-reloads on write)
 GET    /api/config                → read full config
 PUT    /api/config                → replace full config
 PATCH  /api/config/{section}      → update one section
@@ -91,20 +115,20 @@ GET    /api/vault/search?q=…      → full-text search
 # Usage / pricing
 GET    /api/usage                 → monthly spend summary
 GET    /api/usage/daily           → day-by-day breakdown
-GET    /api/usage/pricing         → price-per-million table
 
 # Models & providers
-GET    /api/models                → list provider configs (masked keys)
-POST   /api/models                → add a provider
-PUT    /api/models/{name}         → update a provider
-DELETE /api/models/{name}         → remove a provider
-GET    /api/models/active         → current active model config
-PUT    /api/models/active         → set active model
-POST   /api/models/{name}/test    → send a smoke test prompt
-GET    /api/models/catalog        → configured models with pricing
-GET    /api/models/providers      → provider catalog
+GET    /api/models                → list models from DB
+GET    /api/models/catalog        → enabled models with pricing
+GET    /api/models/available      → discoverable models from provider APIs
+POST   /api/models                → add model
+PUT    /api/models/{id}           → update model
+DELETE /api/models/{id}           → remove model
+POST   /api/models/{id}/enable    → enable model
+POST   /api/models/{id}/disable   → disable model
 GET    /api/providers             → list configured providers
-POST   /api/providers/test        → validate a provider config
+POST   /api/providers             → add provider
+PUT    /api/providers/{id}        → update provider
+DELETE /api/providers/{id}        → remove provider
 
 # MCPs
 GET    /api/mcps                  → list configured MCP servers
@@ -116,77 +140,49 @@ POST   /api/mcps/{name}/disable   → disable (triggers hot reload)
 
 # Scheduled tasks
 GET    /api/scheduled-tasks       → list cron tasks
-POST   /api/scheduled-tasks       → create
-PUT    /api/scheduled-tasks/{id}  → update
-DELETE /api/scheduled-tasks/{id}  → delete
+POST   /api/scheduled-tasks       → create task
+PUT    /api/scheduled-tasks/{id}  → update task
+DELETE /api/scheduled-tasks/{id}  → delete task
+
+# Workflows
+GET    /api/workflows             → list workflows
+POST   /api/workflows             → create workflow
+PUT    /api/workflows/{id}        → update workflow
+DELETE /api/workflows/{id}        → delete workflow
+POST   /api/workflows/{id}/run    → execute workflow
+GET    /api/workflow-runs/{id}    → run history
+
+# Sessions
+GET    /api/sessions              → list active sessions
+POST   /api/sessions/{id}/pin     → pin session to a model
+POST   /api/sessions/{id}/clear   → clear session history
 
 # File uploads
-POST   /api/upload                → save uploaded file, returns {path, filename, transcription?}
+POST   /api/upload                → save uploaded file, returns {path, filename}
+
+# TTS / STT
+POST   /api/tts/synthesize        → text-to-speech
+POST   /api/stt/transcribe        → speech-to-text
 
 # Logs
 GET    /api/logs                  → recent events
-DELETE /api/logs                  → clear
 
 # Lifecycle
-POST   /api/update                → check for update, install, restart
-POST   /api/restart               → restart agent
+POST   /api/restart               → restart agent (with exit code for auto-update swap)
 ```
-
-Test coverage for each endpoint lives under `scripts/tests/` — run
-`bash scripts/test_openagent.sh` to validate the full surface.
-
-## Session queueing
-
-The Gateway owns a `SessionManager` that enforces **one active run per
-client** with a FIFO queue for anything submitted while a turn is in
-flight. Clients get an immediate `queued` acknowledgement with their
-queue position, then stream `status` events until the run finishes with a
-`response`. A `command: stop` cancels the active run and drops the queue.
 
 ## Bridges
 
-Bridges (Telegram, Discord, WhatsApp) are thin adapters — ~130–195 lines
-each — that translate a platform's SDK to the Gateway WS protocol. They
-connect as normal WebSocket clients and multiplex platform users onto the
-agent via distinct `session_id`s.
+Bridges (Telegram, Discord, WhatsApp) are internal WebSocket clients that connect to the gateway over Iroh within the same process. They translate platform SDK events into the unified WS protocol. Each bridge is configured with platform-specific tokens and allowed-user lists in `openagent.yaml`.
 
-### Writing a custom bridge
+The `BaseBridge` class (~150 lines) handles connection lifecycle, retry, and session mapping. Adding a new platform means subclassing `BaseBridge` — the core agent code never changes. See [Channels](./channels.md) for per-platform configuration.
 
-```python
-from openagent.bridges.base import BaseBridge
+## Loopback proxy
 
-class MyBridge(BaseBridge):
-    name = "my-platform"
+The desktop app and CLI client don't speak Iroh directly in all cases. Instead, a **loopback proxy** bridges localhost TCP to the agent's gateway over Iroh QUIC:
 
-    async def _run(self):
-        response = await self.send_message(text, session_id)
-        # Send response.get("text") back to user
+```
+App/CLI ←→ localhost:PORT ←→ LoopbackProxy ←→ Iroh QUIC ←→ Agent Gateway
 ```
 
-See [Channels](./channels.md) for the platform-facing feature matrix
-(allow-lists, voice transcription, stop buttons, etc.).
-
-## CLI client
-
-A separate package, `openagent-cli`, connects to any Gateway over
-WebSocket:
-
-```bash
-pip install openagent-cli
-openagent-cli connect localhost:8765 --token mysecret
-```
-
-It is the reference implementation of the protocol above and supports
-the same slash commands as the desktop app and bridges.
-
-## Remote access
-
-For remote connections, an SSH tunnel is the simplest option:
-
-```bash
-ssh -L 8765:localhost:8765 user@vps
-```
-
-This avoids exposing the Gateway port directly. The `token` field under
-`channels.websocket` is a shared-secret check, not a replacement for
-transport security.
+The proxy presents the device cert on every Iroh stream and translates between plain HTTP/WS on the local side and authenticated Iroh streams on the remote side. This lets standard HTTP clients (fetch, curl, WebSocket browser APIs) work without Iroh integration.

@@ -18,8 +18,7 @@ When using agent directories (`openagent serve ./my-agent`), this file lives at 
 #     entries);
 #   - the REST API — ``/api/providers/*``, ``/api/mcps/*``,
 #     ``/api/models/*``, and ``/api/scheduled-tasks/*``;
-#   - the desktop app's Settings screens and the CLI's ``/mcps`` /
-#     ``/models`` / ``/tasks`` / ``openagent provider`` commands.
+#   - the desktop app's Settings screens.
 #
 # This yaml is the source of truth for ``name``, ``system_prompt``,
 # ``channels``, ``memory`` paths, ``dream_mode``, and ``auto_update``.
@@ -49,8 +48,11 @@ channels:
     allowed_users:
       - "YOUR_TELEGRAM_USER_ID"
   websocket:
-    port: 8765
-    token: ${OPENAGENT_WS_TOKEN}
+    enabled: true
+
+network:
+  role: coordinator
+  name: homelab
 
 dream_mode:
   enabled: true

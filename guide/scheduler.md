@@ -12,17 +12,7 @@ Manage tasks via:
   `/api/scheduled-tasks` on the gateway);
 - the `scheduler` MCP server (from inside an agent chat — `create_scheduled_task`,
   `update_scheduled_task`, etc.);
-- the `openagent task` CLI commands below.
-
-### CLI Management
-
-```bash
-openagent task add --name "test" --cron "* * * * *" --prompt "say hello"
-openagent task list
-openagent task remove <id>
-openagent task enable <id>
-openagent task disable <id>
-```
+- the REST API (`POST /api/scheduled-tasks`, `GET /api/scheduled-tasks`, etc.).
 
 ## Dream Mode
 

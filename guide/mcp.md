@@ -1,6 +1,6 @@
 # MCP Tools
 
-All MCP tools are available to every model — model-agnostic by design. OpenAgent ships **11 built-in MCPs** and the LLM can enumerate them at runtime via the built-in `list_mcp_servers` tool.
+All MCP tools are available to every model — model-agnostic by design. OpenAgent ships **13 built-in MCPs** and the LLM can enumerate them at runtime via the built-in `list_mcp_servers` tool.
 
 ## Built-in MCPs
 
@@ -10,23 +10,25 @@ All MCP tools are available to every model — model-agnostic by design. OpenAge
 | `filesystem` | Read, write, list, search files | Node.js |
 | `editor` | Find-replace, grep, glob | Node.js |
 | `web-search` | Web search + page fetch, no API key | Node.js + Playwright |
-| `shell` | Cross-platform shell execution | Node.js |
+| `shell` | Cross-platform shell execution with multi-session concurrency, background jobs, and autoloop integration | Python (in-process) |
 | `computer-control` | Screenshot, mouse, keyboard (macOS/Linux/Windows) | native binary |
 | `chrome-devtools` | Browser automation, DOM, performance | Node.js + Chrome |
 | `messaging` | Send via Telegram/Discord/WhatsApp + AI-driven phone calls / SMS via Twilio (see [phone-mcp.md](phone-mcp.md)) | Channel tokens / Twilio + OpenAI |
 | `scheduler` | Manage cron tasks from within conversations | Python |
 | `mcp-manager` | Let the agent add/remove/toggle MCP servers at runtime | Python |
 | `model-manager` | Let the agent manage its LLM catalog at runtime | Python |
+| `tool-search` | Cross-MCP fuzzy tool index for capability discovery | Python |
+| `workflow-manager` | Workflow CRUD and execution | Python |
 
 Tool names are namespaced `<server>_<tool>` (Agno convention), so `filesystem_read_text_file`, `vault_write_note`, `scheduler_create_scheduled_task`, etc. — no collisions between servers.
 
 ## Source of truth: the `mcps` table
 
-Since v0.9.0 the MCP list lives in the `mcps` SQLite table, not in yaml. Three equivalent ways to edit it:
+Since v0.9.0 the MCP list lives in the `mcps` SQLite table, not in yaml. Two equivalent ways to edit it:
 
 - **From the agent itself** — ask the LLM to call one of the `mcp-manager` tools (`list_mcps`, `add_custom_mcp`, `update_mcp`, `enable_mcp`, `disable_mcp`, `remove_mcp`). Changes take effect on the next message via the gateway's hot-reload loop.
 - **REST**: `GET/POST/PUT/DELETE /api/mcps[/...]`, plus `POST /api/mcps/{name}/enable` and `/disable`.
-- **UI**: the MCPs screen in the desktop app or the `/mcps` slash command in the CLI — both hit the same REST endpoints.
+- **UI**: the MCPs screen in the desktop app — hits the same REST endpoints.
 
 The `mcps` SQLite table is the sole source of truth. Every boot, `ensure_builtin_mcps` backfills any `BUILTIN_MCP_SPECS` entry whose row is missing (forward compat + safety net against manual DB tampering); existing rows — including disabled ones — are left untouched.
 
@@ -42,7 +44,7 @@ The `mcps` SQLite table is the sole source of truth. Every boot, `ensure_builtin
 > "github-mcp-server stdio" and env GITHUB_PERSONAL_ACCESS_TOKEN=$GITHUB_TOKEN
 ```
 
-Or via REST:
+Or via REST (through the loopback proxy or Iroh gateway):
 
 ```bash
 curl -X POST http://localhost:8765/api/mcps -H 'Content-Type: application/json' -d '{

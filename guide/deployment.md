@@ -9,33 +9,31 @@
 curl -LO https://github.com/geroale/OpenAgent/releases/latest/download/openagent-linux-x64.tar.gz
 tar xzf openagent-linux-x64.tar.gz
 
-# Start with an agent directory
+# Start with an agent directory (auto-bootstraps network + prints invite)
 ./openagent/openagent serve ./my-agent
 
 # Register as OS service
-./openagent/openagent -d ./my-agent setup
+./openagent/openagent service install ./my-agent
 ```
 
 ### pip install
 
 ```bash
 pip install 'openagent-framework[all]'
-openagent setup --full
+openagent serve ./my-agent
 ```
 
 ## Doctor & Setup
 
 ```bash
 openagent doctor                 # environment report
-openagent setup                  # register as OS service
-openagent setup --full           # everything
-openagent install                # alias for setup --full
+openagent service install        # register as OS service
 ```
 
 With an agent directory:
 ```bash
 openagent -d ./my-agent doctor
-openagent -d ./my-agent setup
+openagent -d ./my-agent service install
 ```
 
 ## OS Service
@@ -72,7 +70,7 @@ service:
     TasksMax: 4096
 ```
 
-Re-run `openagent setup` after changing these values so the systemd unit is
+Re-run `openagent service install` after changing these values so the systemd unit is
 rewritten and reloaded. On macOS and Windows this section is ignored.
 
 ```bash
@@ -89,8 +87,8 @@ launchctl list com.openagent.serve       # default
 launchctl list com.openagent.my-agent    # named
 
 # Uninstall (any platform)
-openagent uninstall
-openagent -d ./my-agent uninstall       # specific agent
+openagent service uninstall
+openagent -d ./my-agent service uninstall       # specific agent
 ```
 
 ## Auto-Update

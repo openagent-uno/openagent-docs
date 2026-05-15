@@ -12,10 +12,11 @@ It's model-agnostic: Claude, GLM, Ollama, LM Studio, vLLM, or any OpenAI-compati
 
 ## Core concepts
 
+- [Invitation System & Networking](./invitation-system.md) — Iroh P2P transport, coordinator, device certs, invite tickets
 - [Models](./models.md) — pick a provider
 - [MCP tools](./mcp.md) — filesystem, editor, browser, web search, and more
-- [Gateway](./gateway.md) — WebSocket + REST surface for every client
-- [Channels](./channels.md) — Telegram, Discord, WhatsApp, WebSocket
+- [Gateway](./gateway.md) — WebSocket + REST surface over Iroh QUIC
+- [Channels](./channels.md) — Telegram, Discord, WhatsApp
 - [Memory & vault](./memory.md) — the markdown-based Obsidian vault
 - [Scheduler & Dream Mode](./scheduler.md) — recurring tasks and background work
 

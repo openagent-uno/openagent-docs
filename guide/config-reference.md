@@ -42,13 +42,16 @@ channels:
     green_api_token: ${GREEN_API_TOKEN}
     allowed_users: ["391234567890"]
   websocket:
-    port: 8765
-    token: ${OPENAGENT_WS_TOKEN}
+    enabled: true
 
 services:
     enabled: true
     vault_path: ~/.openagent/memories
     folder_id: openagent-memories
+
+network:
+  role: coordinator             # coordinator | member | standalone
+  name: homelab                 # display name for the network
 
 dream_mode:
   enabled: true
@@ -83,36 +86,30 @@ suites) run to completion — the only per-turn ceiling is
 openagent serve                        # full agent + channels + scheduler
 openagent serve ./my-agent             # serve from agent directory
 openagent serve -ch telegram           # single channel
+openagent serve --no-auto-init         # skip network auto-bootstrap
 
 # Multi-agent
 openagent -d ./my-agent serve          # equivalent to serve ./my-agent
-openagent list                         # list running agents
 openagent migrate --to ./my-agent      # copy data to agent directory
+
+# Network
+openagent network init                 # initialize network (normally auto-bootstrapped)
+openagent network info                 # show network configuration
+openagent network invite --role user   # mint a user invite ticket
+openagent network invite --role device # mint a device invite ticket
+openagent network invite --role agent  # mint an agent invite ticket
+openagent network invites              # list all active invites
+openagent network revoke-device <pub>  # revoke a device certificate
+openagent network list-agents          # list registered agent nodes
 
 # Doctor & setup
 openagent doctor
-openagent install                      # alias for setup --full
-openagent uninstall
-openagent status
-
-# Services
-openagent services status|start|stop
-
-# Tasks
-openagent task add -n "name" -c "cron" -p "prompt"
-openagent task list|remove|enable|disable <id>
+openagent service install              # register as OS service
+openagent service status               # check service status
+openagent service uninstall            # remove OS service
 
 # Updates
 openagent update
-
-# MCP
-openagent mcp list
-
-# Providers
-openagent provider list
-openagent provider add <name> --key=<api-key>
-openagent provider remove <name>
-openagent provider test <name>
 
 # Global options
 openagent -c custom.yaml serve        # custom config
@@ -127,8 +124,8 @@ When set, all data (config, database, memories, logs) is resolved relative to th
 ```bash
 openagent serve ./agent-a             # shorthand
 openagent -d ./agent-a serve          # equivalent long form
-openagent -d ./agent-a task list      # tasks for agent-a
-openagent -d ./agent-a status         # service status for agent-a
+openagent -d ./agent-a doctor         # health check for agent-a
+openagent -d ./agent-a service status # service status for agent-a
 ```
 
 The directory is created automatically with default config if it doesn't exist.

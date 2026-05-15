@@ -8,7 +8,8 @@ AI assistants to edit.
 
 The Gateway — the WebSocket + REST surface that clients connect to — is
 covered in its own [Gateway](./gateway.md) page and is drawn here only as
-the transport boundary.
+the transport boundary. The network layer (Iroh P2P transport, coordinator,
+device certificates) is covered in [Invitation System & Networking](./invitation-system.md).
 
 ## 1. Component map
 
@@ -19,7 +20,7 @@ scheduler, and any bridges; nothing runs as a separate daemon.
 ```mermaid
 flowchart LR
     Clients["Clients<br/>desktop · CLI · bridges"]
-    GW["Gateway<br/>WS + REST"]
+    GW["Gateway<br/>WS + REST<br/>over Iroh QUIC"]
 
     subgraph Core["AgentServer"]
         direction TB
@@ -27,25 +28,27 @@ flowchart LR
         Router["SmartRouter"]
         Pool["MCPPool"]
         Sched["Scheduler"]
+        Net["Network State<br/>Iroh endpoint<br/>Coordinator service"]
     end
 
     LLMs["LLMs<br/>Agno providers · Claude CLI"]
     MCPs["MCP servers<br/>built-ins + custom"]
     State["State<br/>SQLite · vault · YAML"]
 
-    Clients --> GW --> Agent
+    Clients -->|"Iroh QUIC<br/>+ device cert"| GW --> Agent
     Sched --> Agent
     Agent --> Router --> Pool
     Router --> LLMs
     Pool --> MCPs
     Agent <--> State
+    GW <--> Net
 ```
 
 Each box expands into its own section below. The later diagrams zoom in
 on what SmartRouter does (§3), how the MCP pool is built (§4), how the
 vault is accessed (§5), how the scheduler drives tasks and Dream Mode
-(§6), and where state lives (§8). The Gateway itself has its own
-[dedicated page](./gateway.md).
+(§6), how the network layer operates (§7), and where state lives (§8).
+The Gateway itself has its own [dedicated page](./gateway.md).
 
 ## 2. Message flow
 
@@ -251,10 +254,74 @@ dream_mode:
 
 **Auto-update** piggybacks on the same tick (default every 6 hours):
 check GitHub releases → download → on next restart the launcher picks
-the new binary. See [Scheduler & Dream Mode](./scheduler.md) for CLI
-management (`openagent task add / list / enable / disable`).
+the new binary. See [Scheduler & Dream Mode](./scheduler.md).
 
-## 7. Startup and shutdown
+## 7. Network layer: Iroh P2P transport
+
+OpenAgent uses **Iroh** — a QUIC-based P2P networking library — instead of
+plain TCP. Every agent has an Iroh identity (Ed25519 keypair) and a
+NodeId derived from it. Communication is end-to-end encrypted and
+authenticated, with NAT traversal via Iroh relays.
+
+At startup, the `AgentServer` initialises its network state:
+
+```mermaid
+flowchart TB
+    subgraph Coordinator["Coordinator Agent"]
+        Iroh["IrohNode<br/>QUIC endpoint"]
+        CoordSvc["CoordinatorService<br/>JSON-RPC handler"]
+        Auth["NetworkAuthState<br/>cert middleware"]
+        GW["Gateway<br/>WS + REST"]
+    end
+
+    subgraph Client["Client (desktop / CLI)"]
+        ClientIroh["IrohNode"]
+        Proxy["LoopbackProxy"]
+        Cert["Device Cert<br/>(coordinator-signed)"]
+    end
+
+    ClientIroh -->|"QUIC stream<br/>+ device cert"| Iroh
+    Iroh --> Auth
+    Auth --> GW
+    ClientIroh -->|"dial(coordinator<br/>NodeId)"| CoordSvc
+    CoordSvc -->|register / login /<br/>issue cert| Cert
+```
+
+### Network roles
+
+Every agent has a `network` role stored as a singleton row in SQLite:
+
+| Role | Behaviour |
+|---|---|
+| **Standalone** | No network. No gateway. Local-only. |
+| **Coordinator** | Owns the network. Runs the coordinator JSON-RPC service. Mints invites, signs device certs, manages user/device/agent registrations. |
+| **Member** | Joined another coordinator's network. Connects via Iroh, presents device cert on every stream. |
+
+### Device certificates
+
+Instead of bearer tokens or shared secrets, every client authenticates
+with a **coordinator-signed device certificate**. The cert binds
+`(handle, device_pubkey, network_id)` with a 30-day TTL. It is obtained
+through an SRP-6a PAKE login flow (password-authenticated key exchange)
+that never transmits the plaintext password.
+
+The `NetworkAuthState` middleware verifies every inbound request: checks
+the Ed25519 signature against the pinned coordinator pubkey, verifies the
+cert isn't expired, confirms it's for this network, and checks the device
+hasn't been revoked. Failed auth → `401 unauthorized`.
+
+### Auto-bootstrap
+
+On first `openagent serve`, if no network row exists the server
+auto-promotes to coordinator: generates an Iroh identity, creates a
+network UUID, writes the singleton `network` row, and mints a one-shot
+user invite ticket printed to the console. The user pastes this ticket
+into any client to join — no separate setup command needed.
+
+See [Invitation System & Networking](./invitation-system.md) for the full
+ticket lifecycle, coordinator RPC API, and multi-agent federation.
+
+## 8. Startup and shutdown
 
 `AgentServer.start()` brings components up in a fixed order so the
 Gateway never accepts traffic before the agent and MCP pool are ready;
@@ -280,7 +347,7 @@ stateDiagram-v2
     AgentDown --> [*]
 ```
 
-## 8. State layout
+## 9. State layout
 
 Config is layered: CLI flags → `openagent.yaml` → SQLite runtime
 overrides. Anything a user can toggle at runtime (MCPs, models,
@@ -304,6 +371,11 @@ flowchart LR
         T5[(session_bindings)]
         T6[(sdk_sessions)]
         T7[(usage_log)]
+        T8[(network)]
+        T9[(network_users)]
+        T10[(network_devices)]
+        T11[(network_agents)]
+        T12[(network_invitations)]
     end
 
     Agent <--> Runtime
@@ -316,14 +388,14 @@ flowchart LR
     Agent -. via vault MCP .-> MD
 ```
 
-## 9. Extensibility at a glance
+## 10. Extensibility at a glance
 
 Three mechanisms, all configuration-driven — no plugin framework:
 
 - **MCP servers** add tools (`mcp-manager`, `POST /api/mcps`, or the
   MCPs UI tab). No code changes.
 - **Scheduled tasks** put `agent.run(prompt)` on a cron (`scheduler`
-  MCP, `/api/scheduled-tasks`, or `openagent task add`).
+  MCP, `/api/scheduled-tasks`).
 - **Channels / bridges** are WebSocket clients of the Gateway
   (`BaseBridge` subclass, ~150 lines) — adding a new platform never
   touches the core.

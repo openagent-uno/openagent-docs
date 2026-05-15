@@ -45,20 +45,16 @@ No message editing and no inline buttons — users cancel with `/stop` text comm
 
 ## WebSocket (Desktop/Web App)
 
-```yaml
-channels:
-  websocket:
-    port: 8765
-    token: ${OPENAGENT_WS_TOKEN}
-```
+The desktop app and web app connect to the gateway over Iroh QUIC, authenticated by device certificates. No port configuration or shared tokens needed — the invite ticket carries the coordinator's NodeId, and the client dials directly via Iroh.
 
-JSON over WebSocket with shared-token auth. Used by the OpenAgent desktop app. For remote connections, use an SSH tunnel:
+For development or custom clients, the loopback proxy exposes a local TCP endpoint:
 
 ```bash
-ssh -L 8765:localhost:8765 user@vps
+# The loopback proxy bridges localhost to the agent over Iroh
+openagent-cli proxy
 ```
 
-REST endpoint: `GET /api/health` — agent name, version, connected clients.
+This exposes `localhost:PORT` that acts as a plain HTTP/WS gateway, with the proxy handling Iroh transport and device cert presentation transparently.
 
 ## Running Multiple Channels
 

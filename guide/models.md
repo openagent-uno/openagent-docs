@@ -13,28 +13,13 @@ The active runtime is **always** the SmartRouter. It:
 
 ## Providers and models live in the DB
 
-Provider credentials (`api_key`, `base_url`) live in the `providers` SQLite table. Add one via the CLI:
+Provider credentials (`api_key`, `base_url`) live in the `providers` SQLite table. Manage them via:
 
-```bash
-openagent provider add openai --key=$OPENAI_API_KEY
-openagent provider add anthropic --key=$ANTHROPIC_API_KEY
-openagent provider add google --key=$GOOGLE_API_KEY
-```
+- **From the agent** — the `model-manager` built-in MCP exposes `list_providers`, `add_provider`, `list_models`, `list_available_models` (dynamic discovery via the provider's `/v1/models` or OpenRouter fallback), `add_model`, `update_model`, `enable_model`, `disable_model`, `remove_model`, `test_model`.
+- **REST** — `GET/POST/PUT/DELETE /api/providers` and `/api/models`, plus `/enable` and `/disable`. `GET /api/models/available?provider=openai` returns the live catalog for a given provider.
+- **UI** — the Models / Providers screens in the desktop app.
 
-Or via REST:
-
-```bash
-curl -X POST http://localhost:8765/api/providers -H 'Content-Type: application/json' -d '{
-  "name": "openai",
-  "api_key": "sk-..."
-}'
-```
-
-The per-provider **model list** (which ids are available to route to) lives in the `models` table and is managed via:
-
-- **From the agent** — the `model-manager` built-in MCP exposes `list_models`, `list_available_models` (dynamic discovery via the provider's `/v1/models` or OpenRouter fallback), `add_model`, `update_model`, `enable_model`, `disable_model`, `remove_model`, `test_model`.
-- **REST** — `GET/POST/PUT/DELETE /api/models[/...]`, plus `/enable` and `/disable`. `GET /api/models/available?provider=openai` returns the live catalog for a given provider.
-- **UI** — the Models / Providers screens in the desktop app or the `/models` slash command in the CLI.
+The per-provider **model list** (which ids are available to route to) lives in the `models` table. Each row carries `kind` (`llm` / `tts` / `stt`) so the router never crosses capabilities.
 
 ## Claude CLI (Claude Pro/Max subscription)
 
@@ -44,14 +29,7 @@ Install Claude CLI 2.1.96+, run `claude login`, then register at least one claud
 > use model-manager to add claude-sonnet-4-6 under the claude-cli provider
 ```
 
-Or:
-
-```bash
-curl -X POST http://localhost:8765/api/models -H 'Content-Type: application/json' -d '{
-  "provider": "claude-cli",
-  "model_id": "claude-sonnet-4-6"
-}'
-```
+Or via REST (through the loopback proxy or Iroh gateway):
 
 The runtime_id becomes `claude-cli/claude-sonnet-4-6`. When SmartRouter picks it, the session is served by `ClaudeCLIRegistry` (multi-model; pins a session to a specific claude-cli model on first dispatch).
 
