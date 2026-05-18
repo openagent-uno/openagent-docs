@@ -14,7 +14,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: GitHub
-      link: https://github.com/geroale/OpenAgent
+      link: https://github.com/openagent-uno/openagent
 
 features:
   - title: Model-agnostic

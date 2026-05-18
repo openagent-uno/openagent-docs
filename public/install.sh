@@ -17,7 +17,7 @@
 
 set -eu
 
-REPO="geroale/OpenAgent"
+REPO="openagent-uno/openagent"
 PRODUCT="server"   # "server" | "cli"
 PREFIX=""
 

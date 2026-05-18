@@ -1,6 +1,6 @@
 # Getting Started
 
-OpenAgent has three installable pieces plus a hosted Web App. You only need the **Agent Server** — the CLI and Desktop App are optional clients.
+OpenAgent has two installable client pieces plus an optional CLI. You only need the **Agent Server** — the CLI and Desktop App are optional clients.
 
 ## Agent Server
 
@@ -34,7 +34,7 @@ A native chat window for your agent.
 
 <ReleaseDownloads target="desktop" />
 
-Launch the installer, then paste the invite ticket printed by `openagent serve` to connect. The desktop app handles the Iroh P2P transport and device certificate automatically — no manual config needed. Prefer no install? Use the hosted [Web App](https://openagent.uno/app/).
+Launch the installer, then paste the invite ticket printed by `openagent serve` to connect. The desktop app handles the Iroh P2P transport and device certificate automatically — no manual config needed.
 
 ## CLI Client
 

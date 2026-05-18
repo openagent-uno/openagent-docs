@@ -27,8 +27,8 @@ type Target = "server" | "cli" | "desktop";
 const props = defineProps<{ target?: Target }>();
 
 const releasesUrl =
-  "https://api.github.com/repos/geroale/OpenAgent/releases?per_page=30";
-const allReleasesUrl = "https://github.com/geroale/OpenAgent/releases";
+  "https://api.github.com/repos/openagent-uno/openagent/releases?per_page=30";
+const allReleasesUrl = "https://github.com/openagent-uno/openagent/releases";
 
 const loading = ref(true);
 const error = ref("");

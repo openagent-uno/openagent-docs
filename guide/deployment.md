@@ -6,7 +6,7 @@
 
 ```bash
 # Download the latest release for your platform
-curl -LO https://github.com/geroale/OpenAgent/releases/latest/download/openagent-linux-x64.tar.gz
+curl -LO https://github.com/openagent-uno/openagent/releases/latest/download/openagent-linux-x64.tar.gz
 tar xzf openagent-linux-x64.tar.gz
 
 # Start with an agent directory (auto-bootstraps network + prints invite)
