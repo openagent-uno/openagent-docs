@@ -17,7 +17,6 @@
 
 set -eu
 
-REPO="openagent-uno/openagent"
 PRODUCT="server"   # "server" | "cli"
 PREFIX=""
 
@@ -44,8 +43,10 @@ done
 
 if [ "$PRODUCT" = "server" ]; then
     APP="openagent"
+    REPO="openagent-uno/openagent-server"
 else
     APP="openagent-cli"
+    REPO="openagent-uno/openagent-cli"
 fi
 
 # ── Platform detection ───────────────────────────────────────────────

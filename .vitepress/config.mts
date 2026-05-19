@@ -1,7 +1,8 @@
 import { defineConfig } from "vitepress";
 import { withMermaid } from "vitepress-plugin-mermaid";
 
-const repo = "https://github.com/openagent-uno/openagent-docs";
+const org = "https://github.com/openagent-uno";
+const docsRepo = "https://github.com/openagent-uno/openagent-docs";
 const site = "https://openagent.uno/";
 const base = "/";
 
@@ -88,12 +89,12 @@ export default withMermaid(defineConfig({
       "/guide/": guideSidebar,
       "/examples/": guideSidebar,
     },
-    socialLinks: [{ icon: "github", link: repo }],
+    socialLinks: [{ icon: "github", link: org }],
     search: {
       provider: "local",
     },
     editLink: {
-      pattern: "https://github.com/openagent-uno/openagent-docs/edit/main/:path",
+      pattern: `${docsRepo}/edit/main/:path`,
       text: "Edit this page on GitHub",
     },
     footer: {

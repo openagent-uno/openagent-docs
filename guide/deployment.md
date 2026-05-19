@@ -5,16 +5,18 @@
 ### Standalone Executable (recommended)
 
 ```bash
-# Download the latest release for your platform
-curl -LO https://github.com/openagent-uno/openagent/releases/latest/download/openagent-linux-x64.tar.gz
-tar xzf openagent-linux-x64.tar.gz
+# Install the latest server release for your platform
+curl -fsSL https://openagent.uno/install.sh | sh
 
 # Start with an agent directory (auto-bootstraps network + prints invite)
-./openagent/openagent serve ./my-agent
+openagent serve ./my-agent
 
 # Register as OS service
-./openagent/openagent service install ./my-agent
+openagent service install ./my-agent
 ```
+
+Prefer to grab the archive yourself? Browse releases at
+<https://github.com/openagent-uno/openagent-server/releases>.
 
 ### pip install
 

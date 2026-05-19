@@ -26,9 +26,19 @@ type Target = "server" | "cli" | "desktop";
 
 const props = defineProps<{ target?: Target }>();
 
-const releasesUrl =
-  "https://api.github.com/repos/openagent-uno/openagent/releases?per_page=30";
-const allReleasesUrl = "https://github.com/openagent-uno/openagent/releases";
+const REPOS: Record<Target, string> = {
+  server: "openagent-uno/openagent-server",
+  cli: "openagent-uno/openagent-cli",
+  desktop: "openagent-uno/openagent-app",
+};
+
+const repoPath = computed(() => (props.target ? REPOS[props.target] : REPOS.server));
+const releasesUrl = computed(
+  () => `https://api.github.com/repos/${repoPath.value}/releases?per_page=30`,
+);
+const allReleasesUrl = computed(
+  () => `https://github.com/${repoPath.value}/releases`,
+);
 
 const loading = ref(true);
 const error = ref("");
@@ -162,7 +172,7 @@ const desktopAssets = computed<ReleaseMatch | null>(() => {
 
 onMounted(async () => {
   try {
-    const response = await fetch(releasesUrl, {
+    const response = await fetch(releasesUrl.value, {
       headers: {
         Accept: "application/vnd.github+json",
       },
