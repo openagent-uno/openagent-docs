@@ -72,6 +72,8 @@ Users can register custom MCPs at any time, by command, URL, or marketplace pick
 
 A marketplace exposes vetted MCPs for easy discovery and installation. The marketplace is part of the OpenAgent experience, not an external add-on. Adding capabilities to an OpenAgent never requires modifying its source code.
 
+MCPs are loaded into model context lazily. Tool schemas are deferred by default — the agent does not pay token cost for capabilities it is not currently using. A single discovery MCP, **tool-search**, is always injected; it is the agent's index into every other MCP available to it, both built-in and user-registered. When the agent needs a capability, it queries tool-search to load the relevant tool schemas on demand. The framework system prompt may include brief notes about a handful of high-traffic built-in tools to shortcut the most common discoveries, but the schemas themselves are still pulled through tool-search at the moment they are used.
+
 ## 7. Scheduled Tasks
 
 Any prompt can be scheduled. A scheduled task is a full agent run on a cron expression, with the same capabilities as a live chat turn — the same memory vault, the same MCPs, the same sub-agent delegation, the same access to files and images.
@@ -144,7 +146,9 @@ The log is local by default. Aggregation, remote forwarding, and retention polic
 
 A framework system prompt is injected into every conversation. It describes OpenAgent to the agent itself: the vault, the MCPs, the sub-agent model, the scheduler, the workflow engine, the network, the logs — every lever the agent can pull.
 
-This prompt is non-removable. A user's persona prompt is layered on top of it, shaping the agent's voice and character; the framework prompt underneath establishes the agent's awareness of its own system. The user defines who the agent is; the framework defines what the agent has.
+This prompt is non-removable. A user-defined persona prompt — declared in the agent's YAML configuration — is layered on top of it, shaping the agent's voice and character; the framework prompt underneath establishes the agent's awareness of its own system. The user defines who the agent is; the framework defines what the agent has.
+
+The same two-layer prompt — framework underneath, user persona on top — is loaded into every AI execution within OpenAgent, not just live chat turns. Sub-agents at any depth of delegation (team leaders and team members alike), AI blocks fired inside a workflow, and scheduled tasks all run with the same framework prompt, the same user persona, and the same deferred-MCP setup: tool-search injected, every other capability discoverable through it. There is no reduced or alternate baseline for non-interactive execution paths — the agent is the same agent wherever it runs.
 
 An OpenAgent agent knows what it is and what it can do. When asked a question, it does not guess at its own capabilities. When given a task, it does not improvise around its tools — it knows them, reaches for them deliberately, and surfaces them to the user when relevant.
 
