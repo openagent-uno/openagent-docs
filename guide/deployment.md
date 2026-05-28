@@ -163,7 +163,7 @@ Categories:
 | `imports`, `catalog` | Module compile + catalog/pricing helpers |
 | `channels`, `formatting` | Pure-unit string utilities (attachment markers, split, Telegram/WhatsApp rendering) |
 | `pool`, `mcp` | MCP pool lifecycle + per-server tool round-trips |
-| `agno`, `router`, `budget` | Live LLM calls + SmartRouter tier classification + budget-aware fallback + `usage_log` rows |
+| `runtime`, `router`, `budget` | Live LLM calls + SmartRouter tier classification + budget-aware fallback + `usage_log` rows |
 | `gateway`, `sessions` | HTTP server boot + WebSocket message round-trip + session isolation |
 | `upload`, `voice`, `files` | File/audio upload + voice transcription path + full agent-reads-uploaded-file pipeline through filesystem MCP + `[IMAGE:/…]` response markers → WS `attachments` field |
 | `config`, `logs`, `usage`, `models`, `pricing`, `providers`, `vault_rest` | REST surface |

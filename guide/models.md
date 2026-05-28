@@ -1,6 +1,6 @@
 # Models
 
-OpenAgent is model agnostic by design. It supports Agno providers (OpenAI, Anthropic API, Google, Groq, xAI, DeepSeek, Mistral, Cerebras, Z.ai, OpenRouter) and Claude CLI (Claude Pro/Max subscription) — every model gets the same MCP tools, memory behaviour, channels, and client surfaces.
+OpenAgent is model agnostic by design. It supports API-based providers (OpenAI, Anthropic API, Google, Groq, xAI, DeepSeek, Mistral, Cerebras, Z.ai, OpenRouter) and Claude CLI (Claude Pro/Max subscription) — every model gets the same MCP tools, memory behaviour, channels, and client surfaces.
 
 ## One router to rule them all
 
@@ -8,8 +8,8 @@ The active runtime is **always** the SmartRouter. It:
 
 1. Reads the enabled models from the `models` SQLite table.
 2. Classifies each incoming message with a cheap classifier model and picks the single best `runtime_id` from the enabled catalog.
-3. Dispatches to the chosen model — which may be an Agno provider OR a `claude-cli` model, whichever is enabled in the DB.
-4. Enforces **session-side binding**: once a session has been served by one side (agno or claude-cli), every subsequent turn stays there. Conversation state lives in that side's store (Agno's SqliteDb vs Claude's own session store), and mixing the two would split the history. Bindings persist across restarts via the `sdk_sessions` and `session_bindings` tables.
+3. Dispatches to the chosen model — which may be an API-based provider OR a `claude-cli` model, whichever is enabled in the DB.
+4. Enforces **session-side binding**: once a session has been served by one side (API path or claude-cli), every subsequent turn stays there. Conversation state lives in that side's store (the runtime's canonical sessions table vs. Claude's own session store), and mixing the two would split the history. Bindings persist across restarts via the `sdk_sessions` and `session_bindings` tables.
 
 ## Providers and models live in the DB
 

@@ -31,7 +31,7 @@ flowchart LR
         Net["Network State<br/>Iroh endpoint<br/>Coordinator service"]
     end
 
-    LLMs["LLMs<br/>Agno providers · Claude CLI"]
+    LLMs["LLMs<br/>API providers · Claude CLI"]
     MCPs["MCP servers<br/>built-ins + custom"]
     State["State<br/>SQLite · vault · YAML"]
 
@@ -54,8 +54,9 @@ The Gateway itself has its own [dedicated page](./gateway.md).
 
 A chat turn arrives at the Gateway, gets queued per client, and lands in
 `Agent.run()`. The agent hands generation to SmartRouter, which either
-delegates to Agno (which runs its own tool loop against the pool) or to
-Claude CLI (which spawns a subprocess with the same MCP pool wired in).
+delegates to the API provider path (which runs its own tool loop against
+the pool) or to Claude CLI (which spawns a subprocess with the same MCP
+pool wired in).
 
 ```mermaid
 sequenceDiagram
@@ -63,7 +64,7 @@ sequenceDiagram
     participant C as Client
     participant A as Agent
     participant R as SmartRouter
-    participant AG as AgnoProvider
+    participant AG as APIProvider
     participant CC as ClaudeCLIRegistry
     participant P as MCPPool
     participant DB as MemoryDB
@@ -73,9 +74,9 @@ sequenceDiagram
     A->>DB: load history + session_binding
     A->>R: generate(messages, system, tools)
 
-    alt session bound OR classifier picks Agno
+    alt session bound OR classifier picks API provider
         R->>AG: dispatch(runtime_id)
-        loop tool-use loop (Agno-managed)
+        loop tool-use loop (runtime-managed)
             AG->>P: call tool (filesystem / shell / web-search / …)
             P-->>AG: tool result
             AG-->>A: on_status("Using shell…")
@@ -114,9 +115,9 @@ agent talks to. It owns three responsibilities on every turn:
    Otherwise a cheap classifier LLM picks the single best `runtime_id`
    from the enabled catalog based on the turn's content.
 3. **Bind the session.** First dispatch writes `session_bindings` so
-   every follow-up turn in that session stays on the same side (Agno's
-   `SqliteDb` history vs. Claude CLI's session store — mixing them would
-   split the conversation). Bindings persist across restarts via
+   every follow-up turn in that session stays on the same side (the API
+   path's session store vs. Claude CLI's session store — mixing them
+   would split the conversation). Bindings persist across restarts via
    `session_bindings` and `sdk_sessions`.
 
 ```mermaid
@@ -128,18 +129,19 @@ flowchart LR
     PickRT --> Bind[(write session_binding)]
     Bind --> ReuseRT
     ReuseRT --> Tier{Which side?}
-    Tier -- agno/* --> Agno[AgnoProvider]
+    Tier -- api/* --> API[APIProvider]
     Tier -- claude-cli/* --> CC[ClaudeCLIRegistry]
-    Agno --> Pool[(MCPPool — shared)]
+    API --> Pool[(MCPPool — shared)]
     CC --> Pool
 ```
 
-### Agno side
+### API path
 
-`AgnoProvider` wraps Agno's `Agent`, which runs the tool-calling loop
-internally. It consumes the pool's pre-built `MCPTools` toolkits — so
-OpenAgent doesn't reimplement tool dispatch, retries, or JSON-schema
-plumbing. Per-session history is stored in Agno's `SqliteDb`.
+`APIProvider` is OpenAgent's runtime for hosted LLM APIs. It runs the
+tool-calling loop in process, consuming the pool's pre-built `MCPTools`
+toolkits and handling tool dispatch, retries, and JSON-schema plumbing
+internally. Per-session history is stored in the runtime's canonical
+sessions table.
 
 ### Claude CLI side
 
@@ -160,8 +162,8 @@ on the new entry.
 ## 4. MCP Pool: built-ins + customs, shared by both backends
 
 `MCPPool` is the single source of truth for tools available to the agent.
-Both model sides (Agno and Claude CLI) read from the same pool, so we
-don't pay N times to spin up the same subprocess when the router
+Both model sides (the API path and Claude CLI) read from the same pool,
+so we don't pay N times to spin up the same subprocess when the router
 dispatches between tiers.
 
 ```mermaid
@@ -175,7 +177,7 @@ flowchart LR
 
     Stdio --> Tools["Tools available to agent"]
     Http --> Tools
-    Tools --> Agno[AgnoProvider]
+    Tools --> API[APIProvider]
     Tools --> CCLI[ClaudeCLIRegistry]
 
     DB -. updated_at bump .-> Pool

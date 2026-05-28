@@ -20,7 +20,7 @@ All MCP tools are available to every model — model-agnostic by design. OpenAge
 | `tool-search` | Cross-MCP fuzzy tool index for capability discovery | Python |
 | `workflow-manager` | Workflow CRUD and execution | Python |
 
-Tool names are namespaced `<server>_<tool>` (Agno convention), so `filesystem_read_text_file`, `vault_write_note`, `scheduler_create_scheduled_task`, etc. — no collisions between servers.
+Tool names are namespaced `<server>_<tool>`, so `filesystem_read_text_file`, `vault_write_note`, `scheduler_create_scheduled_task`, etc. — no collisions between servers.
 
 ## Source of truth: the `mcps` table
 
@@ -69,12 +69,12 @@ curl -X POST http://localhost:8765/api/mcps -H 'Content-Type: application/json' 
 
 At startup, OpenAgent builds a single `MCPPool` that connects every enabled row in the `mcps` table. Both model backends read from the same pool:
 
-- **Agno providers** (OpenAI, Anthropic API, Z.ai GLM, any OpenAI-compatible endpoint) get the live `MCPTools` toolkits and register them on the Agno `Agent` directly — tool routing, call loops, and retries are Agno's native implementation.
+- **API-based providers** (OpenAI, Anthropic API, Z.ai GLM, any OpenAI-compatible endpoint) get the live `MCPTools` toolkits registered directly on OpenAgent's in-process LLM runtime — tool routing, call loops, and retries are handled by the runtime.
 - **Claude CLI** receives the stdio/URL spec dicts and hands them to the Claude Agent SDK's `ClaudeSDKClient(mcp_servers=...)` parameter, which manages its own subprocess lifecycle.
 
-Sharing the pool means we don't pay N times for the same MCP when the smart router dispatches between tiers, and there's no in-process tool registry for OpenAgent to keep in sync — the providers own it.
+Sharing the pool means we don't pay N times for the same MCP when the smart router dispatches between tiers, and there's no in-process tool registry for OpenAgent to keep in sync — the runtime owns it.
 
-When the `mcps` table changes (manager MCP writes a row, REST endpoint flips `enabled`), the gateway sees the bumped `updated_at` on the next incoming message and rebuilds the pool atomically: new subprocesses come up first, existing Agno providers' toolkit list is swapped in place, old subprocesses are torn down last. In-flight turns see no gap.
+When the `mcps` table changes (manager MCP writes a row, REST endpoint flips `enabled`), the gateway sees the bumped `updated_at` on the next incoming message and rebuilds the pool atomically: new subprocesses come up first, the in-process runtime's toolkit list is swapped in place, old subprocesses are torn down last. In-flight turns see no gap.
 
 ## Claude CLI Notes
 
