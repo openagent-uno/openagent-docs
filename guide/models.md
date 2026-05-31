@@ -1,6 +1,6 @@
 # Models
 
-OpenAgent is model agnostic by design. It supports API-based providers (OpenAI, Anthropic API, Google, Groq, xAI, DeepSeek, Mistral, Cerebras, Z.ai, OpenRouter, Moonshot/Kimi, Qwen) and Claude CLI (Claude Pro/Max subscription) — every model gets the same MCP tools, memory behaviour, channels, and client surfaces.
+OpenAgent is model agnostic by design. It supports API-based providers (OpenAI, Anthropic API, Google, Groq, xAI, DeepSeek, Mistral, Cerebras, Z.ai, OpenRouter, Moonshot/Kimi, Qwen), self-hosted OpenAI-compatible servers (Ollama, vLLM, LM Studio, llama.cpp — via the `local` provider), and Claude CLI (Claude Pro/Max subscription) — every model gets the same MCP tools, memory behaviour, channels, and client surfaces.
 
 ## One router to rule them all
 
@@ -32,6 +32,17 @@ Install Claude CLI 2.1.96+, run `claude login`, then register at least one claud
 Or via REST (through the loopback proxy or Iroh gateway):
 
 The runtime_id becomes `claude-cli/claude-sonnet-4-6`. When SmartRouter picks it, the session is served by `ClaudeCLIRegistry` (multi-model; pins a session to a specific claude-cli model on first dispatch).
+
+## Local / self-hosted models
+
+The `local` provider targets any OpenAI-compatible server you run yourself — Ollama, vLLM, LM Studio, llama.cpp. Because the endpoint is yours, **`base_url` is mandatory**: set it to the server's `/v1` root, e.g. `http://localhost:11434/v1` (Ollama), `http://localhost:8000/v1` (vLLM), or `http://localhost:1234/v1` (LM Studio). If you leave it unset the model build fails fast with a clear error rather than silently falling back to OpenAI's endpoint.
+
+```text
+> use model-manager to add a provider named local with base_url http://localhost:11434/v1
+> then list_available_models for it and add llama3.1
+```
+
+`api_key` is optional — keyless servers get a harmless placeholder so the OpenAI SDK client initialises; if your server enforces a key (e.g. vLLM `--api-key`), set it on the provider and it takes precedence. Model discovery hits your server's `/v1/models`, so `list_available_models` shows whatever you've pulled (`ollama pull …`); you can also `add_model` ids by hand.
 
 ## No models enabled = reject
 
