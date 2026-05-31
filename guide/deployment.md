@@ -146,9 +146,6 @@ The repository ships with an end-to-end test suite that exercises the full gatew
 # Full suite (reads API keys from ~/my-agent/openagent.yaml)
 bash scripts/test_openagent.sh
 
-# Include the Claude Agent SDK path (spawns the `claude` binary)
-bash scripts/test_openagent.sh --include-claude
-
 # Run a specific category only
 bash scripts/test_openagent.sh --only files,rest,channels
 
@@ -169,7 +166,6 @@ Categories:
 | `config`, `logs`, `usage`, `models`, `pricing`, `providers`, `vault_rest` | REST surface |
 | `cron`, `dream`, `updater` | Scheduler roundtrip, dream-mode prompt, updater smoke |
 | `bridges` | Telegram/Discord/WhatsApp module imports + `BaseBridge` contract |
-| `claude_cli` | Claude Agent SDK one-shot + MCP tool invocation (needs `--include-claude`) |
 
 The suite builds a throwaway agent dir under `/tmp/openagent-test-<uuid>/` so it never touches your real `my-agent` config or database.
 

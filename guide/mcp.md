@@ -67,19 +67,10 @@ curl -X POST http://localhost:8765/api/mcps -H 'Content-Type: application/json' 
 
 ## How the Pool Works
 
-At startup, OpenAgent builds a single `MCPPool` that connects every enabled row in the `mcps` table. Both model backends read from the same pool:
+At startup, OpenAgent builds a single `MCPPool` that connects every enabled row in the `mcps` table. The native runtime reads from this one pool:
 
 - **API-based providers** (OpenAI, Anthropic API, Z.ai GLM, any OpenAI-compatible endpoint) get the live `MCPTools` toolkits registered directly on OpenAgent's in-process LLM runtime — tool routing, call loops, and retries are handled by the runtime.
-- **Claude CLI** receives the stdio/URL spec dicts and hands them to the Claude Agent SDK's `ClaudeSDKClient(mcp_servers=...)` parameter, which manages its own subprocess lifecycle.
 
-Sharing the pool means we don't pay N times for the same MCP when the smart router dispatches between tiers, and there's no in-process tool registry for OpenAgent to keep in sync — the runtime owns it.
+Sharing one pool means we don't pay N times for the same MCP when the smart router dispatches between models, and there's no in-process tool registry for OpenAgent to keep in sync — the runtime owns it.
 
 When the `mcps` table changes (manager MCP writes a row, REST endpoint flips `enabled`), the gateway sees the bumped `updated_at` on the next incoming message and rebuilds the pool atomically: new subprocesses come up first, the in-process runtime's toolkit list is swapped in place, old subprocesses are torn down last. In-flight turns see no gap.
-
-## Claude CLI Notes
-
-When a session routes to `claude-cli`, OpenAgent passes the same pool via `mcp_servers`. Known constraints:
-
-- Requires Claude CLI 2.1.96+ and the `claude-agent-sdk` Python package
-- Commands must use absolute paths (handled automatically)
-- The Claude binary is occasionally unreliable when many MCPs register at once; OpenAgent sets `--strict-mcp-config` so failures surface immediately instead of silently dropping servers

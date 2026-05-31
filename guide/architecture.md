@@ -31,7 +31,7 @@ flowchart LR
         Net["Network State<br/>Iroh endpoint<br/>Coordinator service"]
     end
 
-    LLMs["LLMs<br/>API providers · Claude CLI"]
+    LLMs["LLMs<br/>API providers"]
     MCPs["MCP servers<br/>built-ins + custom"]
     State["State<br/>SQLite · vault · YAML"]
 
@@ -53,10 +53,9 @@ The Gateway itself has its own [dedicated page](./gateway.md).
 ## 2. Message flow
 
 A chat turn arrives at the Gateway, gets queued per client, and lands in
-`Agent.run()`. The agent hands generation to SmartRouter, which either
-delegates to the API provider path (which runs its own tool loop against
-the pool) or to Claude CLI (which spawns a subprocess with the same MCP
-pool wired in).
+`Agent.run()`. The agent hands generation to SmartRouter, which dispatches
+to the chosen model's framework. Today that is always the `api-based`
+framework, whose native runtime runs its own tool loop against the pool.
 
 ```mermaid
 sequenceDiagram
@@ -65,7 +64,6 @@ sequenceDiagram
     participant A as Agent
     participant R as SmartRouter
     participant AG as APIProvider
-    participant CC as ClaudeCLIRegistry
     participant P as MCPPool
     participant DB as MemoryDB
     participant V as Vault (MCP)
@@ -74,24 +72,14 @@ sequenceDiagram
     A->>DB: load history + session_binding
     A->>R: generate(messages, system, tools)
 
-    alt session bound OR classifier picks API provider
-        R->>AG: dispatch(runtime_id)
-        loop tool-use loop (runtime-managed)
-            AG->>P: call tool (filesystem / shell / web-search / …)
-            P-->>AG: tool result
-            AG-->>A: on_status("Using shell…")
-        end
-        AG-->>R: final text + usage
-    else session bound OR classifier picks claude-cli
-        R->>CC: dispatch(runtime_id)
-        CC->>CC: resume or create SDK session
-        loop tool-use loop (SDK-managed)
-            CC->>P: call tool via mcp_servers config
-            P-->>CC: tool result
-            CC-->>A: on_status(tool name)
-        end
-        CC-->>R: final text + usage
+    Note over R,AG: session bound, or classifier picks a runtime_id
+    R->>AG: dispatch(runtime_id)
+    loop tool-use loop (runtime-managed)
+        AG->>P: call tool (filesystem / shell / web-search / …)
+        P-->>AG: tool result
+        AG-->>A: on_status("Using shell…")
     end
+    AG-->>R: final text + usage
 
     R->>DB: bind session on first dispatch
     R-->>A: response
@@ -102,7 +90,7 @@ sequenceDiagram
     A-->>C: response + attachments
 ```
 
-## 3. SmartRouter: one router, two backends
+## 3. SmartRouter: one router over a pluggable framework seam
 
 OpenAgent is model-agnostic because `SmartRouter` is the only thing the
 agent talks to. It owns three responsibilities on every turn:
@@ -115,10 +103,10 @@ agent talks to. It owns three responsibilities on every turn:
    Otherwise a cheap classifier LLM picks the single best `runtime_id`
    from the enabled catalog based on the turn's content.
 3. **Bind the session.** First dispatch writes `session_bindings` so
-   every follow-up turn in that session stays on the same side (the API
-   path's session store vs. Claude CLI's session store — mixing them
-   would split the conversation). Bindings persist across restarts via
-   `session_bindings` and `sdk_sessions`.
+   every follow-up turn in that session stays on the same `runtime_id`.
+   Conversation state lives in one canonical sessions store, so the
+   history never splits. Bindings persist across restarts via
+   `session_bindings`.
 
 ```mermaid
 flowchart LR
@@ -128,29 +116,23 @@ flowchart LR
     Classifier --> PickRT[Pick runtime_id from<br/>enabled models table]
     PickRT --> Bind[(write session_binding)]
     Bind --> ReuseRT
-    ReuseRT --> Tier{Which side?}
-    Tier -- api/* --> API[APIProvider]
-    Tier -- claude-cli/* --> CC[ClaudeCLIRegistry]
+    ReuseRT --> FW{framework}
+    FW -- api-based --> API[APIProvider<br/>native runtime]
     API --> Pool[(MCPPool — shared)]
-    CC --> Pool
 ```
 
-### API path
+### The api-based framework
 
-`APIProvider` is OpenAgent's runtime for hosted LLM APIs. It runs the
-tool-calling loop in process, consuming the pool's pre-built `MCPTools`
-toolkits and handling tool dispatch, retries, and JSON-schema plumbing
-internally. Per-session history is stored in the runtime's canonical
-sessions table.
+Each model row carries a `framework`. Today the only shipped value is
+`api-based`, served by `APIProvider` — OpenAgent's native runtime for
+hosted LLM APIs. It runs the tool-calling loop in process, consuming the
+pool's pre-built `MCPTools` toolkits and handling tool dispatch, retries,
+and JSON-schema plumbing internally. Per-session history is stored in the
+runtime's canonical sessions table.
 
-### Claude CLI side
-
-`ClaudeCLIRegistry` manages one or more claude-cli models (e.g.
-`claude-cli/claude-sonnet-4-6`). On first dispatch for a session it spawns
-`claude-agent-sdk` as a subprocess, passing the pool's stdio/URL specs to
-`ClaudeSDKClient(mcp_servers=…)` and `--strict-mcp-config` so MCP load
-failures surface immediately. Session IDs are mapped in `sdk_sessions` so
-subsequent turns resume the same conversation.
+The `framework` column and the dispatch branch above are the seam that
+keeps OpenAgent framework-agnostic: a future framework can register
+behind its own `framework` value without disturbing the api-based path.
 
 ### Hot reload
 
@@ -159,12 +141,12 @@ gateway checks `updated_at` before the next turn and rebuilds the routing
 table in place. Bound sessions keep their binding; new sessions can land
 on the new entry.
 
-## 4. MCP Pool: built-ins + customs, shared by both backends
+## 4. MCP Pool: built-ins + customs, one shared pool
 
 `MCPPool` is the single source of truth for tools available to the agent.
-Both model sides (the API path and Claude CLI) read from the same pool,
-so we don't pay N times to spin up the same subprocess when the router
-dispatches between tiers.
+The native runtime reads from this one pool, so every model the router
+dispatches to shares the same subprocesses rather than spinning up its
+own copy.
 
 ```mermaid
 flowchart LR
@@ -177,8 +159,7 @@ flowchart LR
 
     Stdio --> Tools["Tools available to agent"]
     Http --> Tools
-    Tools --> API[APIProvider]
-    Tools --> CCLI[ClaudeCLIRegistry]
+    Tools --> API["APIProvider<br/>native runtime"]
 
     DB -. updated_at bump .-> Pool
 ```
@@ -371,13 +352,12 @@ flowchart LR
         T3[(providers)]
         T4[(scheduled_tasks)]
         T5[(session_bindings)]
-        T6[(sdk_sessions)]
-        T7[(usage_log)]
-        T8[(network)]
-        T9[(network_users)]
-        T10[(network_devices)]
-        T11[(network_agents)]
-        T12[(network_invitations)]
+        T6[(usage_log)]
+        T7[(network)]
+        T8[(network_users)]
+        T9[(network_devices)]
+        T10[(network_agents)]
+        T11[(network_invitations)]
     end
 
     Agent <--> Runtime

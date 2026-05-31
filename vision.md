@@ -32,7 +32,7 @@ When a conversation approaches a model's context limit, the session compacts in 
 
 ## 3. Models and Providers
 
-Any LLM provider can be added to OpenAgent. Hosted APIs (Anthropic, OpenAI, Google, Mistral, anything else), framework-driven runtimes that wrap subscription products (the Claude CLI, the Codex CLI), local models running on the host machine, and any future provider that a developer chooses to wire up all coexist within the same agent.
+Any LLM provider can be added to OpenAgent. Hosted APIs (Anthropic, OpenAI, Google, Mistral, anything else), framework-driven runtimes that wrap a subscription product or a third-party agent CLI, local models running on the host machine, and any future provider that a developer chooses to wire up all coexist within the same agent.
 
 The set of available models lives in the agent's database as the source of truth. Configuration files describe how to bring the agent up; they do not enumerate models. Models are added, enabled, disabled, and reconfigured at runtime through the agent's own management surfaces.
 
