@@ -19,11 +19,13 @@ const guideSidebar = [
       { text: "Gateway", link: "/guide/gateway" },
       { text: "Channels", link: "/guide/channels" },
       { text: "Memory & Vault", link: "/guide/memory" },
+      { text: "Vault Quality System", link: "/guide/vault-quality" },
       { text: "Scheduler & Dream Mode", link: "/guide/scheduler" },
       { text: "Desktop App", link: "/guide/desktop-app" },
       { text: "Architecture", link: "/guide/architecture" },
       { text: "Deployment", link: "/guide/deployment" },
       { text: "Config Reference", link: "/guide/config-reference" },
+      { text: "Changelog", link: "/guide/changelog" },
     ],
   },
   {
@@ -84,6 +86,7 @@ export default withMermaid(defineConfig({
       { text: "Home", link: "/" },
       { text: "Download", link: "/guide/getting-started" },
       { text: "Docs", link: "/guide/" },
+      { text: "Changelog", link: "/guide/changelog" },
     ],
     sidebar: {
       "/guide/": guideSidebar,

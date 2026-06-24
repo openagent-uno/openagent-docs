@@ -107,10 +107,20 @@ PATCH  /api/config/{section}      → update one section
 # Vault (Obsidian-compatible markdown notes)
 GET    /api/vault/notes           → list notes
 GET    /api/vault/notes/{path}    → read note content + frontmatter + links
-PUT    /api/vault/notes/{path}    → write/update note
+PUT    /api/vault/notes/{path}    → write/update note (validates + commits → {ok,path,warnings,commit})
 DELETE /api/vault/notes/{path}    → delete note
 GET    /api/vault/graph           → {nodes, edges} wikilink graph
-GET    /api/vault/search?q=…      → full-text search
+GET    /api/vault/search?q=…      → full-text search (FTS5)
+
+# Vault quality system (see vault-quality.md)
+GET    /api/vault/gate?strict=&limit=   → run the quality gate → report
+GET    /api/vault/stats                 → {notes, links, broken_links, orphans, components}
+GET    /api/vault/history?path=&limit=  → git log + parsed provenance trailers
+POST   /api/vault/doctor?apply=         → mechanical auto-fix (dry-run unless apply)
+POST   /api/vault/derived               → regenerate llms.txt + _showcase/showcase.md
+POST   /api/vault/move    {from,to}     → move/rename + rewrite inbound wikilinks
+POST   /api/vault/init                  → scaffold the folder taxonomy
+POST   /api/vault/index/sync?force=     → reconcile the incremental index
 
 # Usage / pricing
 GET    /api/usage                 → monthly spend summary

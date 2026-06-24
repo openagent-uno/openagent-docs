@@ -1,0 +1,39 @@
+# Changelog
+
+Notable changes, newest first.
+
+## v0.14.12
+
+### Vault quality system
+
+A code-enforced quality system now wraps the [memory vault](./vault-quality.md). It is pure-Python and runs fully offline.
+
+- **Quality gate** — every note is graded against a fixed rule set: complete frontmatter (`title`, `summary`, `tags`, `status`, `created`/`updated` as `YYYY-MM-DD`), atomic size (≤300 lines), ≥3 real outgoing `[[wikilinks]]`, no broken links, no orphans, a single connected graph, duplicate detection, journal anchoring, absolute dates, and em-dash hygiene. Each violation carries an `error` / `warn` / `info` severity; the gate passes on zero errors.
+- **Incremental index** — a SQLite + FTS5 index with `(mtime, size)` invalidation that re-parses only changed files and scales to 100k+ notes. Graph facts (orphans, components, backlinks, broken links) are computed from the index.
+- **Doctor** — mechanically fixes what code can do safely (collapse multi-line `related:`, strip spaces in `[[ ]]`, normalize dates, scaffold missing frontmatter, em-dash) and hands the judgement calls (orphans, duplicates, over-long, broken links) to the AI as suggestions.
+- **Derived artifacts** — `llms.txt` (a per-folder index AIs read) and `_showcase/showcase.md` are regenerated from the index.
+- **Folder taxonomy + canon** — `vault init` scaffolds the 11-folder Company-Brain taxonomy (`self`, `areas`, `projects`, `sources`, `concepts`, `docs`, `entities`, `data`, `code`, `outputs`, `workspace`), the journal tree, and a `workspace/_canon/` workflow (raw `sources/` → canon → atomic notes).
+- **Move/rename that rewrites links** — renaming a note or folder rewrites every inbound `[[wikilink]]`, preserving path/stem style, alias, and anchor — no broken links.
+- **Git-backed vault** — the vault is a git repo and the *system* auto-commits every change with provenance trailers (`Origin` / `Session` / `Workflow` / `Task` / `Tool`). A background sweep captures external/Obsidian edits; git is bootstrapped at setup if missing and degrades gracefully when absent.
+- **Dream-mode maintenance** — an optional periodic pass: sync → gate → auto-fix → regenerate derived → write a dream-log → commit.
+
+New surfaces:
+
+- **Native MCP tools** (`vault-gate` server): `vault_gate`, `vault_doctor`, `vault_validate_note`, `vault_rename_note`, `vault_init`, `vault_stats`, `vault_search`, `vault_backlinks`, `vault_regenerate_derived`.
+- **REST**: `GET /api/vault/gate`, `GET /api/vault/stats`, `GET /api/vault/history`, `POST /api/vault/doctor`, `POST /api/vault/derived`, `POST /api/vault/move`, `POST /api/vault/init`, `POST /api/vault/index/sync`; and `PUT /api/vault/notes/{path}` now validates + commits and returns `{ok, path, warnings, commit}`.
+- **CLI**: `openagent vault gate|doctor|sync|derive|stats|search|mv|init`, and `openagent doctor --fix` installs git for the vault.
+
+See the full [Vault Quality System](./vault-quality.md) guide.
+
+### Auto-updater hardening
+
+The self-update path is now fail-safe end to end.
+
+- **Fail-closed checksums** — SHA-256 verification is mandatory by default. The updater refuses a download unless it can verify it against the GitHub asset digest or a sibling `.sha256` file.
+- **Atomic swaps** — the new binary replaces the running one via a same-directory atomic rename (`current → .old`, `new → current`); Windows swaps a `.pending` binary at next startup.
+- **Boot-guard rollback** — an update is provisional until the new binary boots healthy. A journal next to the binary counts boot attempts; after repeated failures it automatically restores the previous `.old` binary and remembers the bad version so the poller won't re-install it. A bad release self-heals with no remote access.
+
+## v0.14.11
+
+- Groundwork for the vault quality system: the incremental index, gate engine, and git-backed vault land here ahead of the full surface in v0.14.12.
+- **Save reminder** — on by default: a memory checkpoint ("ALWAYS save relevant things") is injected on the first prompt of a session and then every 3 turns, so the agent reliably persists what matters. Tune it under `memory.vault_reminder.{enabled, every_n_turns}`.

@@ -1,12 +1,13 @@
 # MCP Tools
 
-All MCP tools are available to every model — model-agnostic by design. OpenAgent ships **13 built-in MCPs** and the LLM can enumerate them at runtime via the built-in `list_mcp_servers` tool.
+All MCP tools are available to every model — model-agnostic by design. OpenAgent ships **14 built-in MCPs** and the LLM can enumerate them at runtime via the built-in `list_mcp_servers` tool.
 
 ## Built-in MCPs
 
 | Name | What it does | Requires |
 |---|---|---|
 | `vault` | Read/write Obsidian-compatible markdown notes | Node.js |
+| `vault-gate` | Quality gate, doctor, index, link-rewriting rename, derived artifacts over the markdown vault | Python (in-process) |
 | `filesystem` | Read, write, list, search files | Node.js |
 | `editor` | Find-replace, grep, glob | Node.js |
 | `web-search` | Web search + page fetch, no API key | Node.js + Playwright |
@@ -21,6 +22,10 @@ All MCP tools are available to every model — model-agnostic by design. OpenAge
 | `workflow-manager` | Workflow CRUD and execution | Python |
 
 Tool names are namespaced `<server>_<tool>`, so `filesystem_read_text_file`, `vault_write_note`, `scheduler_create_scheduled_task`, etc. — no collisions between servers.
+
+::: tip Native `vault-gate` tools
+The `vault-gate` MCP is a native, in-process Python server that exposes the [memory-vault quality system](./vault-quality.md): `vault_gate`, `vault_doctor`, `vault_validate_note`, `vault_rename_note` (rewrites inbound wikilinks), `vault_init`, `vault_stats`, `vault_search` (FTS5), `vault_backlinks`, and `vault_regenerate_derived`. It complements the file-level `vault` MCP — the latter reads and writes note content, the former grades, repairs, indexes, and version-controls the vault.
+:::
 
 ## Source of truth: the `mcps` table
 

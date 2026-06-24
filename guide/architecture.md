@@ -188,14 +188,22 @@ flowchart LR
     Agent --> VaultMCP["vault MCP<br/>list_notes · read_note<br/>write_note · search_notes<br/>get_backlinks · graph"]
     VaultMCP <--> Files[("memories/*.md<br/>frontmatter + wikilinks")]
     Files <--> Obsidian[["Obsidian.app<br/>(optional, same folder)"]]
-    Files <--> REST["/api/vault/*<br/>(read-only surface<br/>for desktop app)"]
+    Files <--> REST["/api/vault/*<br/>(read + write +<br/>gate · doctor · history)"]
 ```
 
 The same folder opens untouched in Obsidian — graph view, backlinks,
 plugins all work. The REST endpoints under `/api/vault/*` give the
-desktop app a read surface (notes list, graph, full-text search) without
-going through the MCP round-trip. See [Memory & Vault](./memory.md) for
-note conventions.
+desktop app the full surface — notes list, graph, full-text search, and
+the maintenance operations: read/write notes (validated + committed),
+run the quality gate, run the doctor, move/rename with link rewriting,
+regenerate derived artifacts, and read git history with provenance.
+See [Memory & Vault](./memory.md) for note conventions.
+
+On top of the markdown sits a code-enforced quality system — an
+incremental SQLite + FTS5 index, a quality gate, a mechanical doctor, a
+git-backed history, and dream-mode maintenance. The index is a cache;
+the markdown remains the source of truth. See
+[Vault Quality System](./vault-quality.md) for the full picture.
 
 Only scheduled-task and bookkeeping state lives in the SQLite DB — the
 vault is the knowledge store.
