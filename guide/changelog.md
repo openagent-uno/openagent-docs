@@ -2,6 +2,21 @@
 
 Notable changes, newest first.
 
+## v0.14.15
+
+### Vault history: diffs, restore, and reset
+
+The vault's [git history](./vault-quality.md#git-backed-history-and-provenance) is now inspectable and reversible from the app and CLI.
+
+- **Commit diffs** — every commit shows the files it touched and a coloured unified diff. `GET /api/vault/commit?hash=`.
+- **Restore a state** (non-destructive) — roll the whole vault back to any past commit as a *new* commit; later history is preserved and the restore is itself undoable. `POST /api/vault/restore {hash}`.
+- **Reset to a commit** (destructive) — make a commit the latest state, deleting every commit after it. Ancestor-only, requires an explicit `confirm` flag, and is gated behind a confirmation prompt in the app and CLI. Not exposed as an agent tool. `POST /api/vault/reset {hash, confirm}`.
+- **Clients** — the app's Memory history expands each commit inline with its diff and Restore / Reset buttons; the CLI `vault → history` lets you pick a commit to view, restore, or reset.
+
+### Dream mode in the agent (v0.14.14)
+
+The agent now knows what dream mode is and can run it on request: a new `vault_dream` tool runs a full maintenance pass (gate → auto-fix → regenerate derived → commit) and returns the harder issues for the agent to resolve, with a matching system-prompt playbook.
+
 ## v0.14.12
 
 ### Vault quality system

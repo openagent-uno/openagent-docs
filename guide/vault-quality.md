@@ -154,6 +154,14 @@ $ git -C ~/.openagent/memories log -1
 
 Query the log (with parsed trailers) over REST with `GET /api/vault/history?path=&limit=`.
 
+### Inspecting and rolling back
+
+History is not just a record — you can inspect any commit and travel back to it:
+
+- **See the changes** — `GET /api/vault/commit?hash=` returns the files a commit touched and its unified diff. In the app, tapping a commit in the Memory history expands it inline; in the CLI, `vault → history` lets you pick a commit to view.
+- **Restore a state** (safe) — `POST /api/vault/restore {hash}` brings the whole vault back to how it was at that commit by adding a **new** commit. Every later commit stays in history, so the restore is itself undoable.
+- **Reset to a commit** (destructive) — `POST /api/vault/reset {hash, confirm: true}` makes a commit the latest state, **permanently deleting every commit after it**. It only works on a commit in the current history, requires an explicit `confirm` flag, and is gated behind a confirmation prompt in both the app and the CLI. It is deliberately **not** an agent tool — only a human can trigger it.
+
 Git behaviour is configured under `memory.vault.git.*` — see [Configuration](#configuration).
 
 ## Dream-mode maintenance
@@ -219,6 +227,10 @@ GET  /api/vault/gate?strict=&limit=     → {ok, error_count, warn_count, info_c
 GET  /api/vault/stats                    → {notes, links, broken_links, orphans,
                                             components, largest_component, notes_per_folder}
 GET  /api/vault/history?path=&limit=     → {commits:[{hash, author, message, trailers, …}]}
+GET  /api/vault/commit?hash=             → {hash, subject, author, date, provenance,
+                                            files:[{status, path}], diff, diff_truncated}
+POST /api/vault/restore {hash}           → {ok, commit, restored_from, changed}
+POST /api/vault/reset   {hash, confirm}  → {ok, head, deleted}   (destructive)
 POST /api/vault/doctor?apply=            → {applied, files_changed, mechanical_fixes,
                                             open_suggestions, errors_before, errors_after}
 POST /api/vault/derived                  → regenerate llms.txt + showcase.md
