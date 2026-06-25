@@ -2,6 +2,38 @@
 
 Notable changes, newest first.
 
+## v0.14.18
+
+### The write gate now covers the app and CLI too
+
+v0.14.16 made the *agent's* writes pass the quality gate. Now **every** write
+does — the REST path (`PUT /api/vault/notes`) that the desktop app and CLI use
+runs the same gate:
+
+- Mechanical issues are auto-fixed (frontmatter scaffolded, dates normalized,
+  `[[ ]]` spacing, em dashes).
+- A structurally-broken note (invalid YAML frontmatter, a brand-new note past
+  the atomic size limit) is **rejected with `422`** and a list of errors —
+  nothing is written. The app shows the errors inline and keeps your text; the
+  CLI prints them and asks you to fix and re-save.
+
+### The agent hears what the gate did
+
+After a write, the vault MCP now tells the agent what it **auto-fixed** and
+what **still needs its judgement** (e.g. "missing summary"), so it can improve
+the note rather than assume it's done.
+
+### Migration for existing installs
+
+Agents created before v0.14.16 had their vault MCP pinned to the old npx
+package and never picked up the validated built-in. A boot migration converts
+that row in place (preserving whether it was enabled), so the gate activates on
+every existing install — not just fresh ones.
+
+Set `OPENAGENT_VAULT_VALIDATE_WRITES=0` to fall back to the old warn-only
+behavior. Scheduled [dream-mode](./vault-quality.md#dream-mode-maintenance)
+(config `dream_mode.enabled`) handles the graph-level rules write-time can't.
+
 ## v0.14.16
 
 ### The agent can no longer write a messy note
