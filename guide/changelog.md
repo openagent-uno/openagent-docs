@@ -2,6 +2,29 @@
 
 Notable changes, newest first.
 
+## v0.14.16
+
+### The agent can no longer write a messy note
+
+The memory vault is now driven by a **vendored, validated fork** of the
+markdown-vault MCP (`@bitbonsai/mcpvault` v0.12.1, pinned and shipped in-tree
+instead of fetched at runtime). Every write the agent makes — `write_note`,
+`patch_note`, `update_frontmatter`, `manage_tags` — runs through the vault
+quality gate before it touches disk:
+
+- **Auto-fixed** (silently): missing frontmatter is scaffolded
+  (`title`/`tags`/`status`/`created`/`updated`), dates are normalized to
+  `YYYY-MM-DD`, spaces inside `[[ wikilinks ]]` are stripped, em dashes are
+  replaced. The note lands clean.
+- **Blocked** (the agent must fix and retry): frontmatter that isn't valid
+  YAML, and a brand-new note past the atomic size limit.
+
+Graph-level rules (broken links, orphans, duplicates) are intentionally left
+to the [gate / dream-mode](./vault-quality.md#dream-mode-maintenance) — a note
+legitimately links forward to notes that don't exist yet. The behavior is
+identical to upstream mcpvault when `OPENAGENT_VAULT_VALIDATE_WRITES` is unset;
+OpenAgent enables it automatically.
+
 ## v0.14.15
 
 ### Vault history: diffs, restore, and reset
