@@ -44,11 +44,13 @@ The router decides how each turn is handled. It may answer directly, or it may d
 
 ## 4. Sub-Agents
 
-A sub-agent is not a separate process, a separate identity, or a separate piece of state. It is a scoped execution of another registered model, invoked by the router to handle part of the current turn.
+A sub-agent is a scoped execution of another registered model, invoked by the router to handle part of the current turn. It is not a separate identity and not a separate process — but it *is* a separate, durable piece of state: every sub-agent runs as its own **child session**.
 
-Sub-agents share the parent's context: the same session, the same memory vault, the same MCPs, the same access to files and images attached to the turn. The only thing that varies between the router and a sub-agent is the model performing the reasoning. This keeps decomposition cheap — a sub-agent is a delegation, not a setup.
+A child session is a real session, linked to the parent it was spawned from. It shares the parent's world — the same memory vault, the same MCP pool, the same access to the files and images on the turn — and it runs with the full framework prompt and user persona, exactly like a turn the user typed. What it does *not* share is the parent's transcript: the child owns its own message history, seeded by the task the parent handed it. The only thing that varies between the router and a sub-agent is the model performing the reasoning.
 
-Sub-agents may run in parallel when the work is independent and in sequence when one step feeds the next. The router decides the shape.
+Because a sub-agent is a full session, it is first-class everywhere sessions are. It appears in the session list tagged with its origin, it is navigable — the parent transcript shows each delegation as a card that opens the child session — and it can be continued: a user can drop into a sub-agent's session and send it a follow-up message. The same is true at any depth; a sub-agent that delegates further spawns child sessions of its own, and the lineage is explicit. Sub-agents may run in parallel when the work is independent and in sequence when one step feeds the next, scaling to hundreds of concurrent child sessions; the router decides the shape and synthesizes their results.
+
+Delegation is still cheap — a child session is a spawn, not a setup, and inherits the parent's capabilities wholesale — but it is no longer ephemeral. Decomposition leaves a durable, inspectable trail rather than vanishing into a single turn.
 
 Sub-agents are preferred over workflows for one-off decomposition. When a task naturally splits into "this part is best for model A, this part for model B," the router decomposes and delegates instead of scripting a multi-step chain. Workflows are for repeatable structure; sub-agents are for intelligent decomposition of a single turn.
 
@@ -78,7 +80,7 @@ MCPs are loaded into model context lazily. Tool schemas are deferred by default 
 
 Any prompt can be scheduled. A scheduled task is a full agent run on a cron expression, with the same capabilities as a live chat turn — the same memory vault, the same MCPs, the same sub-agent delegation, the same access to files and images.
 
-Tasks are first-class objects. They can be created by the user from any channel, by the agent on its own initiative when it notices recurring work, or by other agents through federation. They are stored durably and survive restarts.
+Tasks are first-class objects. They can be created by the user from any channel, by the agent on its own initiative when it notices recurring work, or by other agents through federation. They are stored durably and survive restarts. A task can also be fired on demand — by the user from any client, or by the agent through its own tools — running immediately and out of band from its cron schedule, without disturbing the schedule or requiring the task to be enabled; an on-demand firing is recorded in the same run history as a scheduled one. A firing that is already in flight, however it was triggered, can be stopped the same way: the run is hard-stopped and recorded, while the schedule itself is left intact.
 
 A scheduled task is not a degraded version of chat. It is chat with the user's seat empty. The agent fires the prompt, reasons over it with the full system around it, and writes any results back to the vault, the logs, or the user — exactly as it would for a turn the user typed in person.
 
@@ -148,7 +150,7 @@ A framework system prompt is injected into every conversation. It describes Open
 
 This prompt is non-removable. A user-defined persona prompt — declared in the agent's YAML configuration — is layered on top of it, shaping the agent's voice and character; the framework prompt underneath establishes the agent's awareness of its own system. The user defines who the agent is; the framework defines what the agent has.
 
-The same two-layer prompt — framework underneath, user persona on top — is loaded into every AI execution within OpenAgent, not just live chat turns. Sub-agents at any depth of delegation (team leaders and team members alike), AI blocks fired inside a workflow, and scheduled tasks all run with the same framework prompt, the same user persona, and the same deferred-MCP setup: tool-search injected, every other capability discoverable through it. There is no reduced or alternate baseline for non-interactive execution paths — the agent is the same agent wherever it runs.
+The same two-layer prompt — framework underneath, user persona on top — is loaded into every AI execution within OpenAgent, not just live chat turns. Sub-agents at any depth of delegation (team leaders and team members alike), AI blocks fired inside a workflow, and scheduled tasks all run with the same framework prompt, the same user persona, and the same deferred-MCP setup: tool-search injected, every other capability discoverable through it. There is no reduced or alternate baseline for non-interactive execution paths — the agent is the same agent wherever it runs. Each of these runs is a child session in the sense of §4 — a delegated team member, a workflow AI block, a scheduled firing each get their own durable, navigable session — and the prompt that seeds it is recorded as an agent-authored message, distinct from a message a human sent, so the trail shows not just what was said but who said it.
 
 An OpenAgent agent knows what it is and what it can do. When asked a question, it does not guess at its own capabilities. When given a task, it does not improvise around its tools — it knows them, reaches for them deliberately, and surfaces them to the user when relevant.
 
@@ -156,7 +158,7 @@ The agent is expected to be proactive. It surfaces patterns it notices — recur
 
 ## 16. Sessions and Continuity
 
-Every conversation is a session. Sessions are stored durably with full fidelity: every message in both directions, every file sent or received, every MCP tool call, every sub-agent delegation, every model output, every reasoning step that was made visible.
+Every conversation is a session. Sessions are stored durably with full fidelity: every message in both directions, every file sent or received, every MCP tool call, every sub-agent delegation, every model output, every reasoning step that was made visible. Every message carries its author — which human (by network identity, so a session shared between several people attributes each message correctly) or, for a seed prompt the agent gave itself, the agent. A session is not an anonymous "user vs. assistant" stream; it records who said what.
 
 Sessions can be resumed at any time from any channel. Resuming restores not just the text history but the attachments and the tool history that produced it; an agent picking up a week-old conversation has the same view of it as the user does.
 
