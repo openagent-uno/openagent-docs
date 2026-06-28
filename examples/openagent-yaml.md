@@ -47,6 +47,7 @@ channels:
     token: ${TELEGRAM_BOT_TOKEN}
     allowed_users:
       - "YOUR_TELEGRAM_USER_ID"
+    live: true        # narrate tool calls + answer as separate messages (default)
   websocket:
     enabled: true
 

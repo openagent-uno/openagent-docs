@@ -31,6 +31,8 @@ channels:
   telegram:
     token: ${TELEGRAM_BOT_TOKEN}
     allowed_users: ["123456789"]
+    # personality: casual    # preset or free-form persona overlay
+    # live: true             # narrate tool calls + answer as separate messages (default true)
   discord:
     token: ${DISCORD_BOT_TOKEN}
     allowed_users: ["123456789012345678"]

@@ -69,7 +69,8 @@ All traffic on `/ws` is JSON. The protocol uses typed messages for both directio
 | `auth_ok` | `{agent_name, version}` | Handshake accepted |
 | `auth_error` | `{reason}` | Handshake rejected |
 | `delta` | `{text, session_id}` | Streaming token during generation |
-| `status` | `{text, session_id}` | Live progress (tool use, thinking, …) |
+| `status` | `{text, session_id}` | Tool-use progress (e.g. the agent's `ToolExecution` JSON) — **data**, not a UI string |
+| `reasoning` | `{active, session_id}` | Boolean "the agent is thinking" flag. The server never ships a `"Thinking…"` UI string — each client renders its own affordance (native typing indicator, CLI spinner, app animation). `active=true` while thinking, `false` once output starts or the turn ends |
 | `response` | `{text, session_id, model, attachments}` | Final agent reply for a turn |
 | `turn_complete` | `{session_id, usage}` | Turn finished, includes cost/token info |
 | `queued` | `{position}` | Message accepted, waiting in FIFO queue |

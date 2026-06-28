@@ -1,6 +1,6 @@
 # Channels
 
-All channels support text, images, files, voice, and video. Live status updates show what the agent is doing ("⏳ Thinking..." → "🔧 Using shell_exec..." → response).
+All channels support text, images, files, voice, and video. The "is writing" indicator shows the agent is working, and — in [live mode](#live-messages) (on by default) — each tool call and each span of the answer is posted as its own chat message as the turn unfolds.
 
 All channels share the same command vocabulary: `/new`, `/stop`, `/status`, `/queue`, `/help`, `/usage`.
 
@@ -62,6 +62,27 @@ This exposes `localhost:PORT` that acts as a plain HTTP/WS gateway, with the pro
 openagent serve                  # all configured channels
 openagent serve -ch telegram     # specific channel only
 ```
+
+## Live messages
+
+By default every channel narrates a turn in the chat itself, the way Hermes does:
+
+- the platform's **native "is writing" indicator** turns on where one exists (Telegram's typing dot, Discord's "Bot is typing…"); platforms without one (Slack, WhatsApp) simply lean on the step messages. There is no `Thinking…` placeholder message — the server reports reasoning as a boolean flag, never a chat bubble,
+- each tool the agent uses is posted as its own message (`🔧 Using \`bash\``, and `⚠️ \`bash\` failed: …` if it errors),
+- each span of the assistant's text is posted as it is produced — the narration before a tool call, then the final answer — instead of one reply at the end.
+
+The final message is never a duplicate: only the still-unposted tail of the answer is sent. This is one agent with many doorways (vision §9) — the same outbound stream the desktop app renders as a live transcript, mapped onto platform-native messages.
+
+Turn it off per channel to get a single final reply per turn:
+
+```yaml
+channels:
+  telegram:
+    token: ${TELEGRAM_BOT_TOKEN}
+    live: false        # one reply per turn; "is writing" indicator still shows
+```
+
+Or disable it fleet-wide with the `OPENAGENT_CHANNEL_LIVE=0` environment variable (a per-channel `live:` value still wins). Voice-note turns always use the single-reply path so a spoken question gets a spoken answer rather than a wall of intermediate text.
 
 ## Media Support
 
