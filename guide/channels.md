@@ -68,7 +68,7 @@ openagent serve -ch telegram     # specific channel only
 By default every channel narrates a turn in the chat itself, the way Hermes does:
 
 - the platform's **native "is writing" indicator** turns on where one exists (Telegram's typing dot, Discord's "Bot is typing…"); platforms without one (Slack, WhatsApp) simply lean on the step messages. There is no `Thinking…` placeholder message — the server reports reasoning as a boolean flag, never a chat bubble,
-- each tool the agent uses is posted as its own message (`🔧 Using \`bash\``, and `⚠️ \`bash\` failed: …` if it errors),
+- each tool the agent uses is posted as its own message with a **friendly, human label** rather than the raw tool name — memory-vault work reads `🧠 Memorizing — <note>`, `📖 Recalling — <note>`, `🔍 Searching memory — "<query>"`, `🗑️ Forgetting — <note>`; a shell call reads `🔧 Running command`, a web search `🌐 Searching the web`, and a failure `⚠️ <label> failed: …`. The labels match the app's tool chips,
 - each span of the assistant's text is posted as it is produced — the narration before a tool call, then the final answer — instead of one reply at the end.
 
 The final message is never a duplicate: only the still-unposted tail of the answer is sent. This is one agent with many doorways (vision §9) — the same outbound stream the desktop app renders as a live transcript, mapped onto platform-native messages.
