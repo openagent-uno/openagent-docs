@@ -15,7 +15,8 @@ It's model-agnostic: Claude, GLM, Ollama, LM Studio, vLLM, or any OpenAI-compati
 - [Models](./models.md) — pick a provider
 - [MCP tools](./mcp.md) — filesystem, editor, browser, web search, and more
 - [Gateway](./gateway.md) — WebSocket + REST surface over Iroh QUIC
-- [Channels](./channels.md) — Telegram, Discord, WhatsApp
+- [Channels](./channels.md) — Telegram, Discord, WhatsApp, Webhook
+- [Events](./events.md) — inbound webhook triggers for workflows, tasks, and chats
 - [Memory & vault](./memory.md) — the markdown-based Obsidian vault
 - [Scheduler & Dream Mode](./scheduler.md) — recurring tasks and background work
 

@@ -56,6 +56,48 @@ openagent-cli proxy
 
 This exposes `localhost:PORT` that acts as a plain HTTP/WS gateway, with the proxy handling Iroh transport and device cert presentation transparently.
 
+## Webhook (inbound)
+
+Every channel above is **outbound** — the agent dials out to a platform. The
+webhook channel is the one **inbound** doorway: an external service (GitHub,
+Stripe, Zapier, a CI job, a script — or a peer agent) calls a URL the agent
+exposes and triggers work. It is the inbound analogue of the bridges.
+
+```yaml
+channels:
+  webhook:
+    enabled: true
+    host: 0.0.0.0        # bind address (default 0.0.0.0)
+    port: 8899           # TCP port for the /hooks/* listener
+    public_url: https://hooks.example.com   # optional, shown in the UI
+```
+
+Unlike the other channels, the webhook is **not** a bridge — it is a dedicated
+`aiohttp` listener the Gateway starts on its own port, serving **only**
+`/hooks/{slug}`. The full `/api/*` gateway surface is structurally absent from
+that port, so exposing it to the internet never leaks the management API. It is
+**disabled by default**; no port opens until you set `enabled: true`.
+
+What the webhook triggers is an **Event** — a first-class object with a name, a
+webhook `type`, an input schema, a per-event secret, and a bound action (run a
+workflow, fire a scheduled task, or start a chat session). Events are managed in
+the app's **Events** screen, the CLI's `/events` menu, or by the agent through
+the `events-manager` MCP. See [Events](./events.md) for the full model.
+
+```bash
+# Each event has its own path + secret:
+curl -X POST https://hooks.example.com/hooks/github-push \
+  -H 'X-OpenAgent-Event-Secret: whsec_…' \
+  -H 'Content-Type: application/json' \
+  -d '{"pusher": {"name": "ada"}}'
+# → 202 {"delivery_id": "…", "status": "accepted"}
+```
+
+The listener binds a local port; expose it to callers with a reverse proxy or a
+tunnel (and set `public_url` so the UI shows a complete address). Provider
+presets (`github`, `stripe`, `slack`) additionally verify the sender's signature
+over the raw body; `generic` / `generic-hmac` cover everything else.
+
 ## Running Multiple Channels
 
 ```bash

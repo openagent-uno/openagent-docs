@@ -163,6 +163,18 @@ DELETE /api/workflows/{id}        → delete workflow
 POST   /api/workflows/{id}/run    → execute workflow
 GET    /api/workflow-runs/{id}    → run history
 
+# Events (webhook channel) — management surface (device-cert auth)
+GET    /api/events                    → list events (secret hidden)
+POST   /api/events                    → create event (+ one-time secret)
+GET    /api/events/{id}               → read event
+PATCH  /api/events/{id}               → update event
+DELETE /api/events/{id}               → delete event
+POST   /api/events/{id}/rotate-secret → new secret (one-time)
+POST   /api/events/{id}/trigger       → fire now (peer/manual, authenticated)
+GET    /api/events/{id}/deliveries    → delivery history
+GET    /api/event-deliveries/{id}     → one delivery
+GET    /api/event-types               → provider presets for the picker
+
 # Sessions
 GET    /api/sessions              → list active sessions
 POST   /api/sessions/{id}/pin     → pin session to a model
@@ -187,6 +199,18 @@ POST   /api/restart               → restart agent (with exit code for auto-upd
 Bridges (Telegram, Discord, WhatsApp) are internal WebSocket clients that connect to the gateway over Iroh within the same process. They translate platform SDK events into the unified WS protocol. Each bridge is configured with platform-specific tokens and allowed-user lists in `openagent.yaml`.
 
 The `BaseBridge` class (~150 lines) handles connection lifecycle, retry, and session mapping. Adding a new platform means subclassing `BaseBridge` — the core agent code never changes. See [Channels](./channels.md) for per-platform configuration.
+
+## Webhook listener
+
+The [webhook channel](./channels.md#webhook-inbound) is served by a **separate**
+`aiohttp` application on its own TCP port — not the gateway app. It carries only
+`POST /hooks/{slug}` (plus a bodyless `/hooks/health` probe). The `/api/*` routes
+and `/ws` are **not registered** on it, so the management surface is structurally
+unreachable from that port, and the device-cert middleware is deliberately not in
+its chain (an external SaaS can't present a cert). Auth is per-event instead — a
+secret plus an optional provider HMAC, checked inside the handler. See
+[Events](./events.md) for the auth model, and note the listener is **off by
+default**: no socket opens until `channels.webhook.enabled` is set.
 
 ## Loopback proxy
 

@@ -94,11 +94,23 @@ When the agent authors a workflow for itself, it prefers a small workflow that d
 
 Workflows can be triggered manually, on a schedule, by other workflows, or by the agent's own reasoning when it decides a routine has emerged.
 
+## 8.5 Events
+
+An **event** is a first-class inbound trigger. Scheduled tasks fire when the clock says so; workflows run when the agent says so, in a fixed shape; events fire when the *world* says so — an external service or a peer reaches in and the agent does bound work.
+
+An event is a durable object: a name, an inbound "type" (the shape of the caller — a generic webhook, a specific provider), a description of the payload it expects, a credential that authenticates the caller, and a binding to what should happen. The binding is one of three things the rest of the system already knows how to run: an existing workflow, an existing scheduled task, or a fresh chat session seeded with a prompt. The delivered payload flows into whichever it is — as workflow inputs, as task context, or templated into the prompt.
+
+Events are reachable two ways, both authenticated. From outside, an HTTP webhook the agent exposes (§9) lets any service call in with the event's own secret. From inside, a member or a federated peer can fire an event over the peer-to-peer network with their device identity — no shared secret, consistent with §11. However it was triggered, a firing is a durable, inspectable delivery, and the run it produces surfaces in the session history exactly like every other execution (§16): a chat-prompt event opens a real session in the sidebar; a workflow or task event links its run. The payload is untrusted input — it is contained as data, never obeyed as instructions.
+
+Events are first-class everywhere the other automation objects are. A user creates them from any client; the agent creates, edits, and fires them through its own tools, proposing one when it notices a "when X happens elsewhere, do Y" pattern (§15). Removing the webhook channel, or any single provider, leaves the rest of the event system working with what remains (§17).
+
 ## 9. Channels
 
 OpenAgent is reachable from many surfaces. The native desktop and command-line clients, Telegram, Discord, WhatsApp, Slack, and any future integration all expose the same agent.
 
 Channels are stateless adapters. They translate platform-specific events into the unified stream and translate outbound responses back into platform-native form. A Telegram message becomes a text input on the stream; a Discord voice note becomes audio input on the stream. Outbound text becomes a chat message in the appropriate platform; outbound audio becomes a voice reply.
+
+Most channels are outbound — the agent dials out to a platform. One channel is inbound: the **webhook**. It exposes an authenticated HTTP endpoint that an external service, or a peer agent, can call to reach *in* and start work. It is a doorway like any other — one more way the world speaks to the one agent — but it carries no conversation of its own; what it triggers is an event (§8.5).
 
 The agent's identity, memory, sessions, and history do not depend on the channel. A conversation can begin on the desktop client, continue in Telegram, and resume in the CLI, and the agent is the same agent throughout. There is no "Telegram-agent" or "WhatsApp-agent" — there is one agent with many doorways.
 
