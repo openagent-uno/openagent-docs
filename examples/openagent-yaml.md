@@ -1,6 +1,6 @@
 # Example `openagent.yaml`
 
-This is the sanitized production-style example shipped with the repository. LLM providers (API keys, base URLs), the per-provider model catalog, MCP servers, and scheduled tasks all live in SQLite, not in this file — manage them via the `mcp-manager` / `model-manager` / `scheduler` built-in MCPs, the `/api/providers`, `/api/mcps`, `/api/models`, and `/api/scheduled-tasks` REST endpoints, or the desktop/CLI UI.
+This is the sanitized production-style example shipped with the repository. LLM providers (API keys, base URLs), the per-provider model catalog, MCP servers, scheduled tasks, workflows, and events all live in SQLite, not in this file — manage them via the `mcp-manager` / `model-manager` / `scheduler` / `workflow-manager` / `events-manager` built-in MCPs, the `/api/providers`, `/api/mcps`, `/api/models`, `/api/scheduled-tasks`, `/api/workflows`, and `/api/events` REST endpoints, or the desktop/CLI UI.
 
 ::: tip Multi-Agent Mode
 When using agent directories (`openagent serve ./my-agent`), this file lives at `./my-agent/openagent.yaml` alongside the database, memories, and logs. The `memory.db_path` and `memory.vault_path` fields are optional — they default to the agent directory. Each agent directory is fully self-contained.
@@ -10,14 +10,16 @@ When using agent directories (`openagent serve ./my-agent`), this file lives at 
 # OpenAgent example configuration.
 #
 # LLM providers (API keys, base URLs), the per-provider model catalog,
-# MCP servers, and scheduled tasks all live in SQLite, not in this
-# file. Manage them via:
+# MCP servers, scheduled tasks, workflows, and events all live in
+# SQLite, not in this file. Manage them via:
 #
-#   - the ``mcp-manager``, ``model-manager``, and ``scheduler`` built-in
-#     MCPs (the agent itself can call their tools to add/remove/toggle
+#   - the ``mcp-manager``, ``model-manager``, ``scheduler``,
+#     ``workflow-manager``, and ``events-manager`` built-in MCPs
+#     (the agent itself can call their tools to add/remove/toggle
 #     entries);
 #   - the REST API — ``/api/providers/*``, ``/api/mcps/*``,
-#     ``/api/models/*``, and ``/api/scheduled-tasks/*``;
+#     ``/api/models/*``, ``/api/scheduled-tasks/*``, ``/api/workflows/*``,
+#     and ``/api/events/*``;
 #   - the desktop app's Settings screens.
 #
 # This yaml is the source of truth for ``name``, ``system_prompt``,

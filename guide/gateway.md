@@ -165,9 +165,9 @@ GET    /api/workflow-runs/{id}    → run history
 
 # Events (webhook channel) — management surface (device-cert auth)
 GET    /api/events                    → list events (secret hidden)
-POST   /api/events                    → create event (+ one-time secret)
+POST   /api/events                    → create event (+ one-time secret; optional session_binding_*)
 GET    /api/events/{id}               → read event
-PATCH  /api/events/{id}               → update event
+PATCH  /api/events/{id}               → update event, including session_binding_*
 DELETE /api/events/{id}               → delete event
 POST   /api/events/{id}/rotate-secret → new secret (one-time)
 POST   /api/events/{id}/trigger       → fire now (peer/manual, authenticated)
@@ -193,6 +193,12 @@ GET    /api/logs                  → recent events
 # Lifecycle
 POST   /api/restart               → restart agent (with exit code for auto-update swap)
 ```
+
+Event create/update bodies for prompt events may set
+`session_binding_enabled` plus `session_binding_path` (`id`, `ticket.id`,
+`payload.thread.id`, etc.) so deliveries with the same payload value reuse the
+same internal OpenAgent event run session. With the flag off, every delivery
+creates a new run session.
 
 ## Bridges
 

@@ -1,14 +1,16 @@
 # OpenAgent example configuration.
 #
 # LLM providers (API keys, base URLs), the per-provider model catalog,
-# MCP servers, and scheduled tasks all live in SQLite, not in this
-# file. Manage them via:
+# MCP servers, scheduled tasks, workflows, and events all live in
+# SQLite, not in this file. Manage them via:
 #
-#   - the ``mcp-manager``, ``model-manager``, and ``scheduler`` built-in
-#     MCPs (the agent itself can call their tools to add/remove/toggle
+#   - the ``mcp-manager``, ``model-manager``, ``scheduler``,
+#     ``workflow-manager``, and ``events-manager`` built-in MCPs
+#     (the agent itself can call their tools to add/remove/toggle
 #     entries);
 #   - the REST API — ``/api/providers/*``, ``/api/mcps/*``,
-#     ``/api/models/*``, and ``/api/scheduled-tasks/*``;
+#     ``/api/models/*``, ``/api/scheduled-tasks/*``, ``/api/workflows/*``,
+#     and ``/api/events/*``;
 #   - the desktop app's Settings screens and the CLI's ``/mcps`` /
 #     ``/models`` / ``/tasks`` / ``openagent provider`` commands.
 #
@@ -22,8 +24,9 @@ name: my-agent
 
 # Keep this short. Identity + pointer to the memory vault is enough —
 # OpenAgent prepends a framework-level system prompt that already covers
-# how to use the vault (mcpvault tools, wikilinks, frontmatter), MCP-vs-
-# shell preference, acting autonomously, and concise output style. Put
+# how to use the vault (vault MCP tools, wikilinks, frontmatter), the
+# scheduler / workflow / events manager MCPs, MCP-vs-shell preference,
+# acting autonomously, and concise output style. Put
 # project-specific details (package names, app IDs, host names, procedures)
 # INSIDE the memory vault as .md notes — the agent will find them with
 # `search_notes`.
@@ -49,9 +52,10 @@ memory:
   db_path: ~/.openagent/openagent.db
   vault_path: ~/.openagent/memories
 
-# LLM providers, models, MCP servers, and scheduled tasks live in
-# SQLite. Manage them via the ``model-manager`` / ``mcp-manager`` /
-# ``scheduler`` built-in MCPs, the matching REST endpoints, the
+# LLM providers, models, MCP servers, scheduled tasks, workflows, and
+# events live in SQLite. Manage them via the ``model-manager`` /
+# ``mcp-manager`` / ``scheduler`` / ``workflow-manager`` /
+# ``events-manager`` built-in MCPs, the matching REST endpoints, the
 # ``openagent provider`` CLI, or the Settings screens in the desktop
 # app.
 
