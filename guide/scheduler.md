@@ -31,8 +31,21 @@ The receipt lands in the vault at `dream-logs/dream-log-YYYY-MM-DD.md`.
 ```yaml
 dream_mode:
   enabled: true
-  time: "3:00"       # local time
+  time: "3:00"
+  timezone: "Europe/Rome"   # omit → UTC
 ```
+
+::: warning `time` is UTC unless you say otherwise
+Crons evaluate in **UTC**, not in the host's local zone — an untagged
+`3:00` fires at 03:00 UTC on every machine, which is 05:00 in Rome in
+summer. Name a `timezone` (any IANA zone) to get the wall-clock hour you
+actually meant, and DST is handled for you.
+
+Set `scheduler.timezone` to make that the default for every new task.
+It is materialised into each task when it is created and never re-applied
+to tasks that already exist, so setting it never silently re-aims a cron
+you already hand-converted to UTC.
+:::
 
 ## Auto-Update
 
