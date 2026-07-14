@@ -2,14 +2,29 @@
 
 OpenAgent is model agnostic by design. It supports API-based providers (OpenAI, Anthropic API, Google, Groq, xAI, DeepSeek, Mistral, Cerebras, Z.ai, OpenRouter, Moonshot/Kimi, Qwen) and self-hosted OpenAI-compatible servers (Ollama, vLLM, LM Studio, llama.cpp — via the `local` provider) — every model gets the same MCP tools, memory behaviour, channels, and client surfaces.
 
-## One router to rule them all
+## One entry model, then a team
 
-The active runtime is **always** the SmartRouter. It:
+Every turn goes through `ModelDispatcher`. It:
 
 1. Reads the enabled models from the `models` SQLite table.
-2. Classifies each incoming message with a cheap classifier model and picks the single best `runtime_id` from the enabled catalog.
-3. Dispatches to the chosen model through its `framework` — today every shipped model runs on the `api-based` framework (direct provider API calls via the native runtime), but the dispatch seam stays generic so future frameworks can be wired in alongside it.
-4. Enforces **session binding**: once a session has been served by a given `runtime_id`, every subsequent turn stays on it. Conversation state lives in one canonical sessions store, so the history never splits. Bindings persist across restarts via the `session_bindings` table.
+2. Resolves an **entry model** for the session — **without calling an LLM to do it**. The order is: a **per-session pin** (`pinned_sessions` table) → the model flagged `is_classifier` in the catalog → the **first enabled** model in catalog order.
+3. Dispatches through `TeamRouterProvider`, which builds one `Team(mode=coordinate)` per session: the entry model leads, and every *other* enabled LLM joins as a member with a `role` blurb drawn from its `tier_hint`. The leader answers directly or fires one or more `delegate_task_to_member` calls, which run **concurrently** within a turn. With only one LLM enabled the team is skipped and the lone leader runs through a bare `NativeProvider`.
+4. Runs the chosen model through its `framework` — today every shipped model runs on the `api-based` framework (direct provider API calls via the native runtime), but the dispatch seam stays generic so future frameworks can be wired in alongside it.
+
+Conversation state lives in one canonical sessions store shared across frameworks, so history never splits no matter which member answers a given turn.
+
+::: warning `is_classifier` does not name a classifier
+Despite the column name, no cheap classifier model reads your message and picks a route. `is_classifier` is a **stored preference** — the persistent "default team leader" hint you set in the model-manager UI. The per-turn intelligence lives in the team leader's own `delegate_task_to_member` decisions, not in a routing pre-pass.
+:::
+
+## Pinning a session to one model
+
+A session is **not** bound to the first model that served it. It stays on a `runtime_id` only when something explicitly pins it:
+
+- **Ask the agent** — "always use claude opus for this chat". It calls `model_manager_pin_session` on its own session id.
+- **REST / UI** — the model picker in the desktop app.
+
+Pins live in the `pinned_sessions` table (which replaced the pre-v0.14 `session_bindings` table) and survive restarts. `unpin_session` returns the session to normal entry-model resolution. If a pin points at a model you later disable, the dispatcher heals it automatically — it drops the pin and falls through to the flag / first-enabled order rather than failing the turn.
 
 ## Providers and models live in the DB
 
@@ -42,4 +57,4 @@ Every dispatch gets logged to `usage_log` with input / output tokens and compute
 
 ## Hot reload
 
-Edit a model via the manager MCP, the REST endpoints, or the UI — the gateway sees the bumped `updated_at` on the next message, rebuilds the routing table, and the new model is live. Sessions already bound stay bound; only fresh sessions can land on the new entry.
+Edit a model via the manager MCP, the REST endpoints, or the UI — the gateway sees the bumped `updated_at` on the next message, rebuilds the routing table, and the new model is live. Each `TeamRouterProvider` drops its cached per-session team, so the next turn rebuilds with the new membership. Pinned sessions keep their pin; enabling a second model promotes a single-agent deployment to a team on the very next turn.

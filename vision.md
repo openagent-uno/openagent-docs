@@ -38,6 +38,10 @@ The set of available models lives in the agent's database as the source of truth
 
 Each model is registered with a **scope** — a natural-language description of what it is good at. Scopes are not categories from a fixed taxonomy; they are sentences. "Best for long-context reasoning on large codebases." "Cheap and fast classifier suitable for routing decisions." "Vision-capable for screenshots and diagrams." "Local model, free to run, suitable for sensitive content that should not leave the host." The agent reads scopes and reasons about them like any other text.
 
+::: tip Shipped as `tier_hint`
+Scopes exist today under a different name. A model's scope is the free-form `tier_hint` column on its `models` row: `_build_role_blurb` (`src/models/dispatcher.py`) turns it into the natural-language role the team leader reads when routing a turn, and each specialist receives it as a `── Role ──` block appended to its system prompt. Set it via `model-manager`, `PUT /api/models`, or the Models screen. The concept is implemented; only the name diverges from this document.
+:::
+
 One model is the **entry model** — the router. By default the router is the first model enabled; it can be explicitly pinned. Every user turn arrives at the router first.
 
 The router decides how each turn is handled. It may answer directly, or it may delegate parts of the work to other registered models whose scopes match the task at hand. Delegation produces sub-agents that run in parallel or in sequence. The router gathers their outputs and synthesizes the final response.

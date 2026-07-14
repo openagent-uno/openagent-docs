@@ -12,7 +12,7 @@ For the gate rules, the index, the doctor, git provenance, the `vault-gate` MCP 
 
 ```yaml
 memory:
-  db_path: "~/.openagent/openagent.db"   # SQLite — scheduled tasks only
+  db_path: "~/.openagent/openagent.db"   # SQLite — operational state (see Architecture §9)
   vault_path: "~/.openagent/memories"    # Obsidian markdown vault (git-backed)
 ```
 
@@ -21,7 +21,7 @@ Quality-system options live under `memory.vault.*` and `memory.vault_reminder.*`
 ## How It Works
 
 - The agent writes notes as `.md` files inside `vault_path/`
-- The `vault` MCP exposes `list_notes`, `read_note`, `write_note`, `search_notes`, `get_backlinks`, etc.; the `vault-gate` MCP adds `vault_gate`, `vault_doctor`, `vault_rename_note`, and friends
+- The `vault` MCP exposes `list_directory`, `read_note`, `write_note`, `patch_note`, `search_notes`, `manage_tags`, etc.; the `vault-gate` MCP adds `vault_gate`, `vault_doctor`, `vault_rename_note`, `vault_backlinks`, and friends
 - The system auto-commits every change to git with provenance trailers, and a full-text index keeps search fast as the vault grows
 - Open the same folder in Obsidian desktop for graph view, backlinks, and plugin support
 

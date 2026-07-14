@@ -25,7 +25,7 @@ flowchart LR
     subgraph Core["AgentServer"]
         direction TB
         Agent["Agent"]
-        Router["SmartRouter"]
+        Router["ModelDispatcher<br/>+ TeamRouterProvider"]
         Pool["MCPPool"]
         Sched["Scheduler"]
         Net["Network State<br/>Iroh endpoint<br/>Coordinator service"]
@@ -45,7 +45,7 @@ flowchart LR
 ```
 
 Each box expands into its own section below. The later diagrams zoom in
-on what SmartRouter does (§3), how the MCP pool is built (§4), how the
+on how a turn is routed (§3), how the MCP pool is built (§4), how the
 vault is accessed (§5), how the scheduler drives tasks and Dream Mode
 (§6), how the network layer operates (§7), and where state lives (§8).
 The Gateway itself has its own [dedicated page](./gateway.md).
@@ -53,35 +53,49 @@ The Gateway itself has its own [dedicated page](./gateway.md).
 ## 2. Message flow
 
 A chat turn arrives at the Gateway, gets queued per client, and lands in
-`Agent.run()`. The agent hands generation to SmartRouter, which dispatches
-to the chosen model's framework. Today that is always the `api-based`
-framework, whose native runtime runs its own tool loop against the pool.
+`Agent.run()`. The agent hands generation to `ModelDispatcher`, which
+resolves an entry model and dispatches through `TeamRouterProvider`.
+Today every model runs on the `api-based` framework, whose native runtime
+runs its own tool loop against the pool.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as Client
     participant A as Agent
-    participant R as SmartRouter
+    participant R as ModelDispatcher
+    participant T as TeamRouterProvider
     participant AG as APIProvider
     participant P as MCPPool
     participant DB as MemoryDB
     participant V as Vault (MCP)
 
     C->>A: message (via Gateway, queued FIFO)
-    A->>DB: load history + session_binding
+    A->>DB: load history
     A->>R: generate(messages, system, tools)
 
-    Note over R,AG: session bound, or classifier picks a runtime_id
-    R->>AG: dispatch(runtime_id)
+    R->>DB: get_session_pin(session_id)
+    Note over R: pin → is_classifier flag → first enabled<br/>(no classifier LLM call)
+    R->>T: dispatch(entry runtime_id)
+
+    alt other enabled LLMs
+        Note over T,AG: Team(mode=coordinate) — leader + members
+        T->>AG: leader turn
+        opt leader delegates
+            AG->>AG: delegate_task_to_member × N (concurrent)
+        end
+    else single model
+        T->>AG: NativeProvider — lone leader
+    end
+
     loop tool-use loop (runtime-managed)
         AG->>P: call tool (filesystem / shell / web-search / …)
         P-->>AG: tool result
         AG-->>A: on_status("Using shell…")
     end
-    AG-->>R: final text + usage
+    AG-->>T: final text + usage
+    T-->>R: response
 
-    R->>DB: bind session on first dispatch
     R-->>A: response
     opt agent decides to remember
         A->>V: write_note("<topic>.md")
@@ -90,36 +104,84 @@ sequenceDiagram
     A-->>C: response + attachments
 ```
 
-## 3. SmartRouter: one router over a pluggable framework seam
+## 3. ModelDispatcher: entry model, then a team
 
-OpenAgent is model-agnostic because `SmartRouter` is the only thing the
-agent talks to. It owns three responsibilities on every turn:
+OpenAgent is model-agnostic because `ModelDispatcher` is the only thing
+the agent talks to. Routing happens in **two layers**, and neither one is
+a classifier LLM call:
 
-1. **Read the enabled catalog.** Rows in the `models` table marked
-   `enabled=1`, joined with `providers`, produce the set of `runtime_id`s
-   the router may dispatch to. Zero enabled models → fail-fast error, no
-   silent fallback.
-2. **Pick a model.** If the session is already bound, reuse that binding.
-   Otherwise a cheap classifier LLM picks the single best `runtime_id`
-   from the enabled catalog based on the turn's content.
-3. **Bind the session.** First dispatch writes `session_bindings` so
-   every follow-up turn in that session stays on the same `runtime_id`.
-   Conversation state lives in one canonical sessions store, so the
-   history never splits. Bindings persist across restarts via
-   `session_bindings`.
+1. **Resolve the entry model** (`ModelDispatcher`). Cheap, deterministic,
+   no LLM involved — the dispatcher's own docstring reads *"Entry-model
+   resolution (no classifier LLM call)"*. The order is: **per-session
+   pin** (`pinned_sessions` table) → the model flagged `is_classifier` in
+   the catalog → the **first enabled** model in catalog order. Rows in
+   the `models` table marked `enabled=1`, joined with `providers`,
+   produce the set of `runtime_id`s available. Zero enabled models →
+   fail-fast error, no silent fallback.
+2. **Route inside a team** (`TeamRouterProvider`). The entry model is not
+   necessarily the model that answers. The dispatcher hands the turn to a
+   `TeamRouterProvider`, which lazily builds one vendored-runtime
+   `Team(mode=coordinate)` per session: the **leader** is the entry
+   model, and the **members** are every *other* enabled LLM. The leader
+   decides — per turn — whether to answer directly or fire one or more
+   `delegate_task_to_member` calls. Multiple delegations in a single turn
+   run **concurrently**.
+
+Despite the name, `is_classifier` does not select a classifier: it is the
+user's persistent *default team leader* hint, set in the model-manager
+UI. It is a stored preference, not a per-turn decision.
+
+::: warning Single-model deployments skip the team
+A `Team` of one has nothing to route to. When only one LLM is enabled —
+the common case — `TeamRouterProvider` skips the team build entirely and
+dispatches the lone leader through a bare `NativeProvider`.
+:::
 
 ```mermaid
 flowchart LR
-    Msg[Incoming turn] --> HasBind{session_binding<br/>exists?}
-    HasBind -- yes --> ReuseRT[Reuse bound runtime_id]
-    HasBind -- no --> Classifier[Cheap classifier LLM]
-    Classifier --> PickRT[Pick runtime_id from<br/>enabled models table]
-    PickRT --> Bind[(write session_binding)]
-    Bind --> ReuseRT
-    ReuseRT --> FW{framework}
-    FW -- api-based --> API[APIProvider<br/>native runtime]
-    API --> Pool[(MCPPool — shared)]
+    Msg[Incoming turn] --> Pin{pinned_sessions<br/>row exists?}
+    Pin -- yes --> Entry[Entry runtime_id]
+    Pin -- no --> Flag{model flagged<br/>is_classifier?}
+    Flag -- yes --> Entry
+    Flag -- no --> First[First enabled model<br/>in catalog order] --> Entry
+
+    Entry --> Multi{other enabled<br/>LLMs?}
+    Multi -- no --> Solo[NativeProvider<br/>lone leader]
+    Multi -- yes --> Team["Team(mode=coordinate)<br/>leader = entry model<br/>members = every other LLM"]
+    Team -. "delegate_task_to_member<br/>(N per turn, concurrent)" .-> Team
+    Solo --> Pool[(MCPPool — shared)]
+    Team --> Pool
 ```
+
+### Two independent team mechanisms
+
+`Team(mode=coordinate)` above groups members **by model**. There is a
+second, unrelated team built one layer down by
+`NativeProvider._ensure_team()`: a `Team(mode=route)` whose members are
+grouped **by MCP tool family**, one specialist per family. It triggers
+when a single model has **two or more connected MCP servers**.
+
+The two are orthogonal, and which one backs the `<team_members>` a
+leader sees depends on deployment shape:
+
+| Enabled LLMs | Connected MCP families | What routes the turn |
+|---|---|---|
+| 1 | < 2 | Nothing — a single agent answers |
+| 1 | ≥ 2 | `NativeProvider` tool-family team (`mode=route`) |
+| ≥ 2 | any | `TeamRouterProvider` model team (`mode=coordinate`) |
+
+### Session pinning
+
+There is no automatic "bind the session to the first model that served
+it". A session stays on a `runtime_id` only when something **explicitly
+pins** it — the user asking to switch models, or the agent calling
+`model_manager_pin_session` on itself. Pins live in the `pinned_sessions`
+table (migrated from the older `session_bindings`) and persist across
+restarts. A pin pointing at a since-disabled model is self-healing: the
+dispatcher unpins it and falls through to normal resolution.
+
+Conversation state lives in one canonical sessions store shared across
+frameworks, so history never splits regardless of which member answers.
 
 ### The api-based framework
 
@@ -138,8 +200,11 @@ behind its own `framework` value without disturbing the api-based path.
 
 Edit a model or provider via the manager MCPs, REST, or the UI — the
 gateway checks `updated_at` before the next turn and rebuilds the routing
-table in place. Bound sessions keep their binding; new sessions can land
-on the new entry.
+table in place. Changing `providers_config` invalidates each
+`TeamRouterProvider`'s per-session cache, so the next turn rebuilds its
+team with the new members and role blurbs. Pinned sessions keep their pin;
+enabling a second model turns a single-agent deployment into a team on the
+next turn.
 
 ## 4. MCP Pool: built-ins + customs, one shared pool
 
@@ -150,7 +215,8 @@ own copy.
 
 ```mermaid
 flowchart LR
-    Seed["BUILTIN_MCP_SPECS<br/>auto-seeded on boot"] --> DB[(mcps table)]
+    Seed["DEFAULT_MCPS<br/>auto-seeded on boot"] --> DB[(mcps table)]
+    Specs["BUILTIN_MCP_SPECS<br/>19 runnable built-ins"] -. "builtin_name<br/>resolves to" .-> Seed
     Manager["mcp-manager MCP<br/>/api/mcps · UI"] --> DB
 
     DB --> Pool["MCPPool.connect()"]
@@ -164,11 +230,17 @@ flowchart LR
     DB -. updated_at bump .-> Pool
 ```
 
-**Built-ins vs custom.** Built-in rows (`kind='default'` or `'builtin'`)
-are auto-seeded on every boot from `BUILTIN_MCP_SPECS` — missing rows are
-reinstated, existing ones (even disabled) are left untouched. Built-ins
-cannot be removed, only disabled. Custom rows (`kind='custom'`) are full
-CRUD via `mcp-manager`, `POST /api/mcps`, or the MCPs UI tab.
+**Built-ins vs custom.** `ensure_builtin_mcps` runs on every boot and
+seeds a row for each entry in **`DEFAULT_MCPS`** — missing rows are
+reinstated, existing ones (even disabled) are left untouched. Most
+`DEFAULT_MCPS` entries carry a `builtin_name` that resolves against
+`BUILTIN_MCP_SPECS` (the 19 servers OpenAgent knows how to run); the rest
+are bare subprocess entries with their own `command`. The two sets are not
+identical: `media-gen` and `memory-search` are built-in but not seeded on,
+while `filesystem` is seeded on but is not a built-in. Built-in rows
+(`kind='default'` or `'builtin'`) cannot be removed, only disabled. Custom
+rows (`kind='custom'`) are full CRUD via `mcp-manager`, `POST /api/mcps`,
+or the MCPs UI tab.
 
 **Tool naming.** Tools are namespaced `<server>_<tool>`
 (`filesystem_read_text_file`, `vault_write_note`,
@@ -185,7 +257,7 @@ never talks to it directly; every read and write goes through the
 
 ```mermaid
 flowchart LR
-    Agent --> VaultMCP["vault MCP<br/>list_notes · read_note<br/>write_note · search_notes<br/>get_backlinks · graph"]
+    Agent --> VaultMCP["vault MCP<br/>list_directory · read_note<br/>write_note · patch_note<br/>search_notes · manage_tags"]
     VaultMCP <--> Files[("memories/*.md<br/>frontmatter + wikilinks")]
     Files <--> Obsidian[["Obsidian.app<br/>(optional, same folder)"]]
     Files <--> REST["/api/vault/*<br/>(read + write +<br/>gate · doctor · history)"]
@@ -205,8 +277,10 @@ git-backed history, and dream-mode maintenance. The index is a cache;
 the markdown remains the source of truth. See
 [Vault Quality System](./vault-quality.md) for the full picture.
 
-Only scheduled-task and bookkeeping state lives in the SQLite DB — the
-vault is the knowledge store.
+The split is about *knowledge*, not about volume: the vault is the
+knowledge store, while the SQLite DB holds operational state — sessions
+and transcripts, the MCP / model / provider catalogs, scheduled tasks,
+workflows, events, network identity, and usage. See §9 for the layout.
 
 ## 6. Scheduler and Dream Mode
 
@@ -232,10 +306,13 @@ flowchart LR
 ```
 
 **Dream Mode** is a specific built-in scheduled task that runs nightly
-maintenance: consolidates duplicate memory files, cross-links notes with
-wikilinks, runs a health check, writes a dream log back to the vault. It
-has no dedicated daemon — it's literally a `scheduled_tasks` row with a
-fixed prompt and a nightly cron, invoked through the same tick loop.
+maintenance across two missions: curate the vault (merge duplicates,
+cross-link with wikilinks, reconcile contradictions), then read the last
+~24h of `events.jsonl` and repair what broke — errored scheduled tasks,
+failed workflows, recurring model / MCP / channel errors — writing a dream
+log back to the vault under `dream-logs/`. It has no dedicated daemon —
+it's literally a `scheduled_tasks` row with a fixed prompt and a nightly
+cron, invoked through the same tick loop.
 
 ```yaml
 dream_mode:
@@ -243,9 +320,11 @@ dream_mode:
   time: "3:00"   # local time
 ```
 
-**Auto-update** piggybacks on the same tick (default every 6 hours):
-check GitHub releases → download → on next restart the launcher picks
-the new binary. See [Scheduler & Dream Mode](./scheduler.md).
+**Auto-update** is the other built-in task and piggybacks on the same
+tick: check GitHub releases → download → on next restart the launcher
+picks the new binary. It is **off unless you enable it**; once enabled it
+defaults to a daily `0 4 * * *` check, overridable via
+`auto_update.check_interval`. See [Scheduler & Dream Mode](./scheduler.md).
 
 ## 7. Network layer: Iroh P2P transport
 
@@ -342,7 +421,7 @@ stateDiagram-v2
 
 Config is layered: CLI flags → `openagent.yaml` → SQLite runtime
 overrides. Anything a user can toggle at runtime (MCPs, models,
-providers, tasks, session bindings, usage) lives in the DB; the YAML is
+providers, tasks, session pins, usage) lives in the DB; the YAML is
 for bootstrap, channel credentials, and things that rarely change.
 
 ```mermaid
@@ -354,22 +433,18 @@ flowchart LR
     Cfg --> Agent
     Cfg --> Sched[Scheduler]
 
-    subgraph Runtime["openagent.db (SQLite)"]
-        T1[(mcps)]
-        T2[(models)]
-        T3[(providers)]
-        T4[(scheduled_tasks)]
-        T5[(session_bindings)]
-        T6[(usage_log)]
-        T7[(network)]
-        T8[(network_users)]
-        T9[(network_devices)]
-        T10[(network_agents)]
-        T11[(network_invitations)]
+    subgraph Runtime["openagent.db (SQLite) — 28 tables"]
+        direction TB
+        Cat["catalogs<br/>mcps · models · providers"]
+        Tasks["tasks<br/>scheduled_tasks · task_runs<br/>workflow_tasks · workflow_runs"]
+        Conv["conversation<br/>sessions · pinned_sessions<br/>conversation_embeddings"]
+        Ev["events<br/>events · event_deliveries<br/>event_session_bindings"]
+        Book["bookkeeping<br/>usage_log · config_state<br/>user_profiles · skills"]
+        Net["network<br/>network · network_users<br/>network_devices · network_agents<br/>network_invitations · device_certs"]
     end
 
     Agent <--> Runtime
-    Sched <--> T4
+    Sched <--> Tasks
 
     subgraph Vault["memories/"]
         MD["*.md notes<br/>frontmatter + wikilinks"]
