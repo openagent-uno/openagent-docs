@@ -15,6 +15,7 @@ The gate walks every note and grades it against a fixed set of rules. Each viola
 
 | Rule | Severity | Auto-fixable | What it checks |
 |---|---|---|---|
+| `frontmatter_yaml` | **error** | yes | The `---` block parses as YAML at all |
 | `frontmatter` | warn | yes | `title`, `summary`, `tags`, `status`, `created`, `updated` all present |
 | `atomicity` | warn | no | One idea per note; stays under the line limit (default 300) |
 | `min_links` | info | no | Content notes link out to **≥3** distinct real notes |
@@ -22,14 +23,14 @@ The gate walks every note and grades it against a fixed set of rules. Each viola
 | `orphan` | warn | no | Every note has at least one inbound link (`_index` exempt) |
 | `connectivity` | warn | no | The graph is one connected component, not islands |
 | `filename` | info | no | Filenames unique across the vault, domain-prefixed |
-| `wikilink_format` | warn | yes | `related:` on one line; no spaces inside `[[ ]]` |
+| `wikilink_format` | warn | yes | No spaces inside `[[ ]]` |
 | `date_format` | info | yes | `created` / `updated` are absolute `YYYY-MM-DD` dates |
 | `taxonomy` | info | no | `tags[0]` matches the top-level folder |
 | `duplicate` | warn | no | No two notes with identical content / title / summary |
 | `journal_link` | warn | no | A journal/session/daily note anchors to ≥1 static entity note |
 | `em_dash` | info | yes | Prose avoids the em dash (—); use `--` or a comma |
 
-Folders that hold raw material — `sources/`, `_showcase/`, `_templates/`, `.obsidian/` — are excluded from the structural rules. `strict` mode promotes warnings to errors; `enforce_taxonomy` turns the taxonomy check on.
+Folders that hold raw material — `sources/`, `workspace/` (except the journal), `_showcase/`, `_templates/`, `templates/`, and any dot-directory (`.obsidian/`, `.trash/`, …) — are excluded from the structural rules. This scope is declared **once**, in `src/memory/vault/taxonomy.py` + the `GateConfig` defaults: the gate and the write path call it directly, and the vendored Node vault MCP reads `scope.generated.ts`, rendered from the same values and pinned against drift by `scripts/tests/test_vault_twins.py`. `strict` mode promotes warnings to errors; `enforce_taxonomy` turns the taxonomy check on.
 
 A passing run looks like this:
 
@@ -63,7 +64,10 @@ The **doctor** repairs everything a script can fix *safely* and *deterministical
 
 It mechanically fixes:
 
-- collapse a multi-line `related:` list onto one comma-separated line
+- repair frontmatter that does not parse as YAML back into YAML -- the bare
+  `related: [[a]], [[b]]` sequence becomes a block list, and an unquoted scalar
+  containing `": "` gets quoted (verified by re-parsing; never written unless
+  the repair lands)
 - strip whitespace inside `[[ wikilinks ]]`
 - normalize `created` / `updated` to `YYYY-MM-DD` when coercible
 - scaffold missing mechanical frontmatter fields (`title`, `tags`, `status`, `created`, `updated` — `summary` is left for a human/AI to write)
