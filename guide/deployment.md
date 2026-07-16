@@ -176,3 +176,71 @@ openagent migrate --to ./my-agent
 ```
 
 This copies your existing config, database, and memories from platform-standard paths to the new agent directory.
+
+## Semantic Recall (embedding) kit
+
+A copy-paste setup for [semantic recall](./memory.md#semantic-recall) across one or many agents. The pattern: run **one** embedding endpoint off the busy cluster (a Mac over Tailscale, or a hosted API) and point every agent at it via config. Embedding is CPU-heavy — never run it as a sidecar on a CPU-saturated node (a single embed can exceed the 30 s client timeout, and the index never builds).
+
+### 1. The embedding endpoint (Mac / Apple Silicon over Tailscale)
+
+Install ollama, pull the model, and expose it on the tailnet as a boot-persistent daemon:
+
+```bash
+brew install ollama
+# LaunchDaemon (runs at boot, no login needed) bound to all interfaces:
+sudo tee /Library/LaunchDaemons/com.esound.ollama.plist >/dev/null <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.esound.ollama</string>
+  <key>UserName</key><string>development</string>
+  <key>ProgramArguments</key>
+  <array><string>/opt/homebrew/opt/ollama/bin/ollama</string><string>serve</string></array>
+  <key>EnvironmentVariables</key><dict>
+    <key>OLLAMA_HOST</key><string>0.0.0.0:11434</string>
+    <key>OLLAMA_KEEP_ALIVE</key><string>-1</string>
+    <key>HOME</key><string>/Users/development</string>
+  </dict>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+</dict></plist>
+PLIST
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.esound.ollama.plist
+ollama pull nomic-embed-text
+# verify from another tailnet host:
+curl http://<tailscale-ip>:11434/api/tags
+```
+
+Apple Silicon serves `nomic-embed-text` on the Metal GPU (~140 ms/embed); a 2000-note vault cold-builds in a few minutes. `OLLAMA_KEEP_ALIVE=-1` keeps the model resident. One endpoint serves every agent.
+
+> Alternative: skip the Mac entirely and point agents at a hosted API — set `embedding_model: openai:text-embedding-3-small`, `embedding_base_url: https://api.openai.com/v1`, `embedding_api_key`. Same config surface.
+
+### 2. Per-agent config
+
+Each agent needs the `memory` block in its `openagent.yaml` (mapped to env by `_build_agent` at boot):
+
+```yaml
+memory:
+  embedding_model: local:nomic-embed-text
+  embedding_base_url: http://<tailscale-ip>:11434/v1
+  auto_recall:
+    enabled: true
+    min_score: 0.6
+    warm_budget: 16
+```
+
+If the deployment also sets `OPENAGENT_EMBEDDING_*` in supervisord's `[program:openagent] environment=`, change it there too and run `supervisorctl reread && supervisorctl update` (a plain `restart` won't reload `environment=`). Keep the two in agreement. Agents must be on a build with the background index builder (≥ v0.18.4) so the index builds without waiting for live traffic.
+
+### 3. Apply to a running pod
+
+```bash
+# point the agent at the endpoint (both the yaml and, if present, supervisord.conf)
+kubectl exec <pod> -c agent -- sed -i \
+  's#embedding_base_url:.*#embedding_base_url: http://<tailscale-ip>:11434/v1#' \
+  /data/agent/openagent.yaml
+# then a clean process cycle — a fresh pod avoids stale orphan serve procs:
+kubectl delete pod <pod>          # Recreate strategy; the built index persists on the PVC
+```
+
+Verify the build: `semantic.index_built` in `events.jsonl`, growing `vault_vectors` in `semantic_index_*.db`, and zero `semantic.embed_error` naming the endpoint.
+
+> A ready-to-adapt copy of the LaunchDaemon script lives at `~/k8s-manifests/mini-ollama-setup.sh` (not auto-committed — treat `~/k8s-manifests` as out-of-repo, per the signing-incident rule).

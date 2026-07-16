@@ -52,6 +52,22 @@ memory:
   db_path: ~/.openagent/openagent.db
   vault_path: ~/.openagent/memories
 
+  # Semantic recall (optional). Unset embedding_model = OFF, retrieval is FTS
+  # only (see guide/memory.md#semantic-recall). Two interchangeable backends:
+  #
+  #   (a) self-hosted ollama on a real machine ($0, private) — e.g. a Mac over
+  #       Tailscale. Do NOT run this as a CPU sidecar on a saturated node.
+  embedding_model: local:nomic-embed-text
+  embedding_base_url: http://<tailscale-ip>:11434/v1
+  #   (b) hosted API (reliable, ~$0.02 one-time for a 2k-note vault):
+  # embedding_model: openai:text-embedding-3-small
+  # embedding_base_url: https://api.openai.com/v1
+  # embedding_api_key: ${OPENAI_API_KEY}
+  auto_recall:
+    enabled: true
+    min_score: 0.6      # cosine floor (default 0.75); a weak match is no match
+    warm_budget: 16     # on-turn top-up budget (default 24)
+
 # LLM providers, models, MCP servers, scheduled tasks, workflows, and
 # events live in SQLite. Manage them via the ``model-manager`` /
 # ``mcp-manager`` / ``scheduler`` / ``workflow-manager`` /
