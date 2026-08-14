@@ -35,9 +35,9 @@ channels:
     # live: true             # narrate tool calls + answer as separate messages (default true)
   discord:
     token: ${DISCORD_BOT_TOKEN}
-    allowed_users: ["123456789012345678"]
+    allowed_users: ["123456789012345678"] # users allowed to DM/use commands
     # allowed_guilds: []
-    # listen_channels: []
+    # listen_channels: []                 # shared channels; all members may talk
     # dm_only: false
   whatsapp:
     green_api_id: ${GREEN_API_ID}

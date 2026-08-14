@@ -21,14 +21,21 @@ Features: inline stop button, voice transcription (faster-whisper local or OpenA
 channels:
   discord:
     token: ${DISCORD_BOT_TOKEN}
-    allowed_users:
+    allowed_users:              # users allowed to DM/use slash commands
       - "123456789012345678"
     # allowed_guilds: []         # [] = any server
-    # listen_channels: []        # [] = mention required
+    listen_channels:             # all members may talk in these channels
+      - "234567890123456789"
     # dm_only: false             # true = DMs only
 ```
 
-`allowed_users` is **mandatory** — the channel refuses to start without it. Unauthorized messages are silently ignored. Supports native slash commands and an inline stop button.
+Discord has separate private and shared access boundaries. `allowed_users`
+controls DMs and slash commands; `listen_channels` controls guild messages and
+accepts every human member of each listed channel. An allowed DM user does not
+bypass `listen_channels` elsewhere in the server. Configure at least one of
+the two lists, or the bridge will not start. `allowed_guilds` can further
+restrict which servers own the listed channels. Supports native slash commands
+and an inline stop button.
 
 ## WhatsApp (Green API)
 
